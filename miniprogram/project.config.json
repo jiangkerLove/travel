@@ -1,0 +1,362 @@
+{
+  "description": "项目配置文件",
+  "packOptions": {
+    "ignore": [
+      {
+        "value": "node_modules",
+        "type": "folder"
+      },
+      {
+        "value": "demos",
+        "type": "folder"
+      },
+      {
+        "value": "behaviors",
+        "type": "folder"
+      },
+      {
+        "value": "components/demo-block",
+        "type": "folder"
+      },
+      {
+        "value": "components/demo-header",
+        "type": "folder"
+      },
+      {
+        "value": "components/pull-down-list",
+        "type": "folder"
+      },
+      {
+        "value": "components/trd-privacy",
+        "type": "folder"
+      },
+      {
+        "value": "pages/action-sheet",
+        "type": "folder"
+      },
+      {
+        "value": "pages/avatar",
+        "type": "folder"
+      },
+      {
+        "value": "pages/back-top",
+        "type": "folder"
+      },
+      {
+        "value": "pages/badge",
+        "type": "folder"
+      },
+      {
+        "value": "pages/button",
+        "type": "folder"
+      },
+      {
+        "value": "pages/calendar",
+        "type": "folder"
+      },
+      {
+        "value": "pages/cascader",
+        "type": "folder"
+      },
+      {
+        "value": "pages/cell",
+        "type": "folder"
+      },
+      {
+        "value": "pages/cell-group",
+        "type": "folder"
+      },
+      {
+        "value": "pages/checkbox",
+        "type": "folder"
+      },
+      {
+        "value": "pages/col",
+        "type": "folder"
+      },
+      {
+        "value": "pages/collapse",
+        "type": "folder"
+      },
+      {
+        "value": "pages/color-picker",
+        "type": "folder"
+      },
+      {
+        "value": "pages/count-down",
+        "type": "folder"
+      },
+      {
+        "value": "pages/date-time-picker",
+        "type": "folder"
+      },
+      {
+        "value": "pages/dialog",
+        "type": "folder"
+      },
+      {
+        "value": "pages/divider",
+        "type": "folder"
+      },
+      {
+        "value": "pages/drawer",
+        "type": "folder"
+      },
+      {
+        "value": "pages/dropdown-menu",
+        "type": "folder"
+      },
+      {
+        "value": "pages/empty",
+        "type": "folder"
+      },
+      {
+        "value": "pages/fab",
+        "type": "folder"
+      },
+      {
+        "value": "pages/footer",
+        "type": "folder"
+      },
+      {
+        "value": "pages/grid",
+        "type": "folder"
+      },
+      {
+        "value": "pages/guide",
+        "type": "folder"
+      },
+      {
+        "value": "pages/gulp-error",
+        "type": "folder"
+      },
+      {
+        "value": "pages/home",
+        "type": "folder"
+      },
+      {
+        "value": "pages/icon",
+        "type": "folder"
+      },
+      {
+        "value": "pages/image",
+        "type": "folder"
+      },
+      {
+        "value": "pages/image-viewer",
+        "type": "folder"
+      },
+      {
+        "value": "pages/indexes",
+        "type": "folder"
+      },
+      {
+        "value": "pages/input",
+        "type": "folder"
+      },
+      {
+        "value": "pages/link",
+        "type": "folder"
+      },
+      {
+        "value": "pages/loading",
+        "type": "folder"
+      },
+      {
+        "value": "pages/message",
+        "type": "folder"
+      },
+      {
+        "value": "pages/navbar",
+        "type": "folder"
+      },
+      {
+        "value": "pages/notice-bar",
+        "type": "folder"
+      },
+      {
+        "value": "pages/overlay",
+        "type": "folder"
+      },
+      {
+        "value": "pages/picker",
+        "type": "folder"
+      },
+      {
+        "value": "pages/popup",
+        "type": "folder"
+      },
+      {
+        "value": "pages/progress",
+        "type": "folder"
+      },
+      {
+        "value": "pages/pull-down-refresh",
+        "type": "folder"
+      },
+      {
+        "value": "pages/radio",
+        "type": "folder"
+      },
+      {
+        "value": "pages/rate",
+        "type": "folder"
+      },
+      {
+        "value": "pages/result",
+        "type": "folder"
+      },
+      {
+        "value": "pages/search",
+        "type": "folder"
+      },
+      {
+        "value": "pages/side-bar",
+        "type": "folder"
+      },
+      {
+        "value": "pages/skeleton",
+        "type": "folder"
+      },
+      {
+        "value": "pages/slider",
+        "type": "folder"
+      },
+      {
+        "value": "pages/stepper",
+        "type": "folder"
+      },
+      {
+        "value": "pages/steps",
+        "type": "folder"
+      },
+      {
+        "value": "pages/sticky",
+        "type": "folder"
+      },
+      {
+        "value": "pages/swipe-cell",
+        "type": "folder"
+      },
+      {
+        "value": "pages/swiper",
+        "type": "folder"
+      },
+      {
+        "value": "pages/switch",
+        "type": "folder"
+      },
+      {
+        "value": "pages/tab-bar",
+        "type": "folder"
+      },
+      {
+        "value": "pages/tabs",
+        "type": "folder"
+      },
+      {
+        "value": "pages/tag",
+        "type": "folder"
+      },
+      {
+        "value": "pages/textarea",
+        "type": "folder"
+      },
+      {
+        "value": "pages/toast",
+        "type": "folder"
+      },
+      {
+        "value": "pages/transition",
+        "type": "folder"
+      },
+      {
+        "value": "pages/tree-select",
+        "type": "folder"
+      },
+      {
+        "value": "pages/upload",
+        "type": "folder"
+      },
+      {
+        "value": ".md",
+        "type": "suffix"
+      },
+      {
+        "value": ".map",
+        "type": "suffix"
+      },
+      {
+        "value": ".ts",
+        "type": "suffix"
+      },
+      {
+        "value": ".eslintrc.js",
+        "type": "file"
+      },
+      {
+        "value": "utils/gulpError.js",
+        "type": "file"
+      },
+      {
+        "value": "project.private.config.json",
+        "type": "file"
+      },
+      {
+        "value": "assets/TDesign-logo_dark.png",
+        "type": "file"
+      },
+      {
+        "value": "assets/TDesign-logo_light.png",
+        "type": "file"
+      }
+    ],
+    "include": []
+  },
+  "setting": {
+    "urlCheck": false,
+    "scopeDataCheck": false,
+    "coverView": true,
+    "es6": true,
+    "postcss": true,
+    "compileHotReLoad": false,
+    "preloadBackgroundData": false,
+    "minified": true,
+    "autoAudits": false,
+    "newFeature": true,
+    "uglifyFileName": false,
+    "uploadWithSourceMap": true,
+    "useIsolateContext": true,
+    "nodeModules": true,
+    "enhance": false,
+    "useCompilerModule": true,
+    "userConfirmedUseCompilerModuleSwitch": false,
+    "showShadowRootInWxmlPanel": true,
+    "skylineRenderEnable": false,
+    "bigPackageSizeSupport": true,
+    "packNpmRelationList": [
+      {
+        "packageJsonPath": "./package.json",
+        "miniprogramNpmDistDir": "./"
+      }
+    ],
+    "packNpmManually": true,
+    "ignoreUploadUnusedFiles": true,
+    "babelSetting": {
+      "ignore": [],
+      "disablePlugins": [],
+      "outputPath": ""
+    }
+  },
+  "compileType": "miniprogram",
+  "libVersion": "3.17.1",
+  "appid": "wxdff32b93e0d6eff4",
+  "projectname": "结伴出行",
+  "simulatorType": "wechat",
+  "simulatorPluginLibVersion": {},
+  "condition": {},
+  "editorSetting": {
+    "tabIndent": "auto",
+    "tabSize": 2
+  }
+}

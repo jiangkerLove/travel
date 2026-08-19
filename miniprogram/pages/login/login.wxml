@@ -1,0 +1,26 @@
+<view class="login">
+  <view class="hero">
+    <view class="logo">结</view>
+    <view class="h1">结伴出行</view>
+    <view class="sub">打开即按微信账号识别，不用登录</view>
+  </view>
+
+  <view class="card">
+    <button class="avatar-btn" open-type="chooseAvatar" bindchooseavatar="onChooseAvatar">
+      <image wx:if="{{avatar}}" class="avatar" src="{{avatar}}" mode="aspectFill" />
+      <view wx:else class="avatar placeholder">头像</view>
+    </button>
+    <input class="nick" type="nickname" placeholder="点击填写微信昵称" value="{{nickname}}" bindinput="onNick" />
+    <t-button theme="primary" size="large" block bind:tap="onWxLogin">进入小程序</t-button>
+  </view>
+
+  <view class="card">
+    <view class="muted" style="margin-bottom: 20rpx">开发演示（无需真机授权）</view>
+    <view class="demo-row">
+      <t-button size="medium" variant="outline" bind:tap="onDemo" data-id="demo_deer" data-name="小鹿">小鹿 团长</t-button>
+      <t-button size="medium" variant="outline" bind:tap="onDemo" data-id="demo_wei" data-name="阿伟">阿伟</t-button>
+      <t-button size="medium" variant="outline" bind:tap="onDemo" data-id="demo_lin" data-name="小林">小林</t-button>
+    </view>
+    <t-button size="medium" variant="text" theme="primary" bind:tap="onSeed">导入川西演示旅途</t-button>
+  </view>
+</view>

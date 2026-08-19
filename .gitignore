@@ -1,0 +1,49 @@
+# OS
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Editors / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.settings/
+*.iml
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.key
+
+# Logs & caches
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.cache/
+.turbo/
+tmp/
+temp/
+
+# Node
+node_modules/
+
+# Rust
+**/target/
+
+# Docker / local data
+*.sqlite
+*.db
+
+# WeChat DevTools
+**/.tea/
+*.wxvpkg
+project.private.config.json

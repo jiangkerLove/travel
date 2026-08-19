@@ -1,0 +1,67 @@
+<view class="page">
+  <view class="tag-row" style="margin-bottom: 24rpx">
+    <view class="chip {{bill_type === 1 ? 'active' : ''}}" bind:tap="setType" data-v="1">集体账单</view>
+    <view class="chip {{bill_type === 2 ? 'active' : ''}}" bind:tap="setType" data-v="2">个人账单</view>
+  </view>
+
+  <view class="muted" style="margin-bottom: 12rpx">费用类型</view>
+  <view class="tag-row" style="margin-bottom: 24rpx">
+    <view class="chip {{cost_type === item.value ? 'active' : ''}}" wx:for="{{costTypes}}" wx:key="value" bind:tap="setCost" data-v="{{item.value}}">{{item.label}}</view>
+  </view>
+
+  <t-cell-group theme="card">
+    <t-input label="消费名称" value="{{bill_name}}" bindchange="onName" placeholder="例如 火锅 / 特产 / 超市" />
+    <t-input label="金额" type="digit" value="{{amount}}" bindchange="onAmount" placeholder="0.00" />
+    <picker mode="date" value="{{consume_date}}" bindchange="onDate">
+      <t-cell title="消费日期" note="{{consume_date}}" arrow />
+    </picker>
+    <t-cell title="付款人" note="{{payName}}" arrow bind:tap="pickPayer" />
+    <t-textarea label="备注" value="{{remark}}" bindchange="onRemark" />
+  </t-cell-group>
+
+  <view class="card">
+    <view class="title">关联行程（可选）</view>
+    <view class="muted" style="margin: 8rpx 0 16rpx">购物、小费等不必绑定；从行程点进来会自动带上</view>
+    <view class="tag-row">
+      <view class="chip {{!day_plan_id ? 'active' : ''}}" bind:tap="clearPlan">不绑定</view>
+      <view
+        class="chip {{day_plan_id === item.id ? 'active' : ''}}"
+        wx:for="{{plans}}"
+        wx:key="id"
+        bind:tap="setPlan"
+        data-id="{{item.id}}"
+      >{{item.label}}</view>
+    </view>
+  </view>
+
+  <view class="card" wx:if="{{bill_type === 2}}">
+    <view class="row space-between">
+      <view>
+        <view class="title">团员可见</view>
+        <view class="muted">关闭后仅自己能看到这笔个人账单</view>
+      </view>
+      <t-switch value="{{visible_all}}" bindchange="onVisible" />
+    </view>
+  </view>
+
+  <view class="card" wx:if="{{bill_type === 1}}">
+    <view class="title" style="margin-bottom: 16rpx">分摊成员（平均）</view>
+    <view class="tag-row">
+      <view
+        class="chip {{item.checked ? 'active' : ''}}"
+        wx:for="{{members}}"
+        wx:key="user_id"
+        bind:tap="toggleShare"
+        data-id="{{item.user_id}}"
+      >{{item.nickname}}</view>
+    </view>
+    <view class="muted" style="margin-top: 12rpx">不选则默认全员分摊</view>
+  </view>
+
+  <view style="margin-top: 32rpx">
+    <t-button theme="primary" size="large" block bind:tap="submit">保存账单</t-button>
+  </view>
+  <view style="margin-top: 16rpx" wx:if="{{id}}">
+    <t-button theme="danger" variant="outline" block bind:tap="remove">删除</t-button>
+  </view>
+</view>

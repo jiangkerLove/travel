@@ -1,0 +1,8 @@
+<view class="page">
+  <view class="card">
+    <view class="title" style="margin-bottom: 24rpx">输入邀请码</view>
+    <t-input placeholder="6 位邀请码" value="{{code}}" bindchange="onCode" />
+    <t-button theme="primary" block bind:tap="submit" style="margin-top: 32rpx">加入</t-button>
+  </view>
+  <view class="muted" style="padding: 0 8rpx">团长可在旅途成员页复制邀请码，或使用演示码 DEMO88</view>
+</view>

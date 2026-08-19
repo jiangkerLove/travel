@@ -1,0 +1,9 @@
+{
+  "desc": "结伴出行",
+  "rules": [
+    {
+      "action": "allow",
+      "page": "*"
+    }
+  ]
+}

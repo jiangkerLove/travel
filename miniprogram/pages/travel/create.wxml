@@ -1,0 +1,16 @@
+<view class="page">
+  <t-cell-group theme="card">
+    <t-input label="旅途名称" placeholder="例如 川西小环线" value="{{travel_name}}" bindchange="onName" />
+    <t-input label="目的地" placeholder="例如 四姑娘山" value="{{destination}}" bindchange="onDest" />
+    <picker mode="date" value="{{start_date}}" bindchange="onStart">
+      <t-cell title="开始日期" note="{{start_date || '请选择'}}" arrow />
+    </picker>
+    <picker mode="date" value="{{end_date}}" bindchange="onEnd">
+      <t-cell title="结束日期" note="{{end_date || '请选择'}}" arrow />
+    </picker>
+    <t-textarea label="备注" placeholder="选填" value="{{remark}}" bindchange="onRemark" maxlength="200" />
+  </t-cell-group>
+  <view style="margin-top: 48rpx">
+    <t-button theme="primary" size="large" block bind:tap="submit">创建并生成邀请码</t-button>
+  </view>
+</view>

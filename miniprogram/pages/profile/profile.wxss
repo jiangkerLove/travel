@@ -1,0 +1,108 @@
+page {
+  background: #f3f6f3;
+}
+
+.me-page {
+  min-height: 100vh;
+  padding: 24rpx 32rpx 80rpx;
+  background: #f3f6f3;
+  box-sizing: border-box;
+}
+
+.hero {
+  padding: 48rpx 8rpx 40rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.avatar-btn {
+  width: 160rpx;
+  height: 160rpx;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border-radius: 50%;
+  overflow: hidden;
+  line-height: 0;
+}
+.avatar-btn::after { border: none; }
+
+.avatar {
+  width: 160rpx;
+  height: 160rpx;
+  border-radius: 50%;
+  background: #e7f1eb;
+}
+
+.fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #5d8a76;
+  font-size: 56rpx;
+  font-weight: 650;
+  line-height: 160rpx;
+}
+
+.nick {
+  margin-top: 24rpx;
+  width: 80%;
+  height: 56rpx;
+  text-align: center;
+  font-size: 40rpx;
+  font-weight: 650;
+  color: #2f3d36;
+}
+
+.menu {
+  background: #fff;
+  border-radius: 28rpx;
+  padding: 8rpx 8rpx;
+  box-shadow: 0 10rpx 28rpx rgba(80, 110, 96, 0.04);
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  padding: 28rpx 24rpx;
+  border-radius: 20rpx;
+}
+
+.menu-item-hover {
+  background: #f6faf7;
+}
+
+.menu-mark {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 16rpx;
+  background: #e7f1eb;
+  color: #5d8a76;
+  font-size: 24rpx;
+  font-weight: 650;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.menu-text {
+  flex: 1;
+  margin-left: 20rpx;
+  font-size: 30rpx;
+  color: #2f3d36;
+}
+
+.menu-arrow {
+  color: #c5d0c9;
+  font-size: 40rpx;
+  line-height: 1;
+}
+
+.menu-line {
+  height: 1rpx;
+  margin-left: 100rpx;
+  margin-right: 24rpx;
+  background: #eef3ef;
+}

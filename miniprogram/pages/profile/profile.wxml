@@ -1,0 +1,35 @@
+<view class="me-page">
+  <view class="hero">
+    <button class="avatar-btn" open-type="chooseAvatar" bindchooseavatar="onChooseAvatar">
+      <image wx:if="{{user.avatar}}" class="avatar" src="{{user.avatar}}" mode="aspectFill" />
+      <view wx:else class="avatar fallback">{{initial}}</view>
+    </button>
+    <input
+      class="nick"
+      type="nickname"
+      placeholder="旅行者"
+      value="{{user.nickname}}"
+      bindblur="onNickBlur"
+    />
+  </view>
+
+  <view class="menu">
+    <view class="menu-item" hover-class="menu-item-hover" bind:tap="goHistory">
+      <view class="menu-mark">历</view>
+      <view class="menu-text">历史旅途</view>
+      <view class="menu-arrow">›</view>
+    </view>
+    <view class="menu-line"></view>
+    <view class="menu-item" hover-class="menu-item-hover" bind:tap="goPrivacy">
+      <view class="menu-mark">隐</view>
+      <view class="menu-text">隐私设置</view>
+      <view class="menu-arrow">›</view>
+    </view>
+    <view class="menu-line"></view>
+    <view class="menu-item" hover-class="menu-item-hover" bind:tap="goAbout">
+      <view class="menu-mark">关</view>
+      <view class="menu-text">关于</view>
+      <view class="menu-arrow">›</view>
+    </view>
+  </view>
+</view>

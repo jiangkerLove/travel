@@ -1,0 +1,57 @@
+<view class="home-page">
+  <view class="hero">
+    <view class="brand">结伴出行</view>
+    <view class="lead">一起把路线排好，慢慢走</view>
+    <view class="hero-actions">
+      <view class="soft-btn main" bind:tap="goCreate">新建旅途</view>
+      <view class="soft-btn" bind:tap="goJoin">加入</view>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-title">进行中</view>
+    <view class="empty" wx:if="{{!list.length && !loading}}">
+      <view class="empty-mark">🍃</view>
+      <view class="empty-text">还没有旅途</view>
+      <view class="empty-sub">先建一个，或者用邀请码加入同伴</view>
+    </view>
+
+    <view class="trip" wx:for="{{list}}" wx:key="id">
+      <view class="trip-top">
+        <view class="thumb">{{item.initial}}</view>
+        <view class="trip-main">
+          <view class="trip-title-row">
+            <view class="trip-title">{{item.travel_name}}</view>
+            <view class="soft-pill">{{item.status_text}}</view>
+          </view>
+          <view class="trip-place">{{item.destination}}</view>
+          <view class="trip-date">{{item.rangeText}}</view>
+        </view>
+      </view>
+      <view class="trip-meta">
+        <text>{{item.member_count}} 人同行</text>
+        <text class="dot">·</text>
+        <text>{{item.day_count}} 天</text>
+        <text class="dot">·</text>
+        <text>{{item.role === 1 ? '你是团长' : '你是成员'}}</text>
+      </view>
+      <view class="trip-split">
+        <view
+          class="split-item {{item.can_edit ? '' : 'off'}}"
+          hover-class="split-item-hover"
+          catch:tap="openTrip"
+          data-id="{{item.id}}"
+          data-mode="edit"
+        >排路线</view>
+        <view class="split-line"></view>
+        <view
+          class="split-item"
+          hover-class="split-item-hover"
+          catch:tap="openTrip"
+          data-id="{{item.id}}"
+          data-mode="browse"
+        >看行程</view>
+      </view>
+    </view>
+  </view>
+</view>

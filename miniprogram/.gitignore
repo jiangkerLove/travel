@@ -1,0 +1,39 @@
+# 微信开发者工具本机配置（会覆盖 project.config.json）
+project.private.config.json
+
+# npm 与微信「构建 npm」产物，不入库
+node_modules/
+miniprogram_npm/
+
+# 系统与编辑器
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# 日志与缓存
+*.log
+.tea/
+
+# TDesign 示例（本地可留着对照，不入库、不上传）
+/demos/
+/behaviors/
+/components/demo-block/
+/components/demo-header/
+/components/pull-down-list/
+/components/trd-privacy/
+/utils/gulpError.js
+/assets/TDesign-logo_dark.png
+/assets/TDesign-logo_light.png
+/app.d.ts
+
+/pages/*
+!/pages/bill/
+!/pages/boot/
+!/pages/index/
+!/pages/login/
+!/pages/mine/
+!/pages/plan/
+!/pages/profile/
+!/pages/settle/
+!/pages/travel/

@@ -1,0 +1,18 @@
+<view class="page">
+  <view class="card" wx:for="{{users}}" wx:key="user_id">
+    <view class="row space-between">
+      <view class="title">{{item.nickname}}</view>
+      <view class="amount {{item.net >= 0 ? 'in' : 'out'}}">{{item.net >= 0 ? '+' : ''}}¥{{item.net}}</view>
+    </view>
+    <view class="muted">垫付 ¥{{item.paid}} · 应付 ¥{{item.owed}}</view>
+  </view>
+
+  <view class="title" style="margin: 16rpx 8rpx">转账清单</view>
+  <t-empty wx:if="{{!transfers.length}}" description="已经扯平，无需转账" />
+  <view class="card" wx:for="{{transfers}}" wx:key="index">
+    <view class="title">{{item.from_nickname}} → {{item.to_nickname}}</view>
+    <view class="amount in">¥{{item.amount}}</view>
+  </view>
+
+  <t-button wx:if="{{is_leader}}" theme="primary" block bind:tap="toggleLock">{{is_lock ? '解锁结算' : '锁定结算'}}</t-button>
+</view>

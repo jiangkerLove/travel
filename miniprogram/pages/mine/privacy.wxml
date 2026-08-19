@@ -1,0 +1,11 @@
+<view class="page">
+  <view class="card">
+    <view class="row space-between">
+      <view>
+        <view class="title">个人账单默认团员可见</view>
+        <view class="muted">仅影响之后新建的个人账单，已有账单请单独修改</view>
+      </view>
+      <t-switch value="{{on}}" bindchange="onChange" />
+    </view>
+  </view>
+</view>

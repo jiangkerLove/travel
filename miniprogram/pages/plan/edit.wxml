@@ -1,0 +1,113 @@
+<view class="edit-page">
+  <view class="search-screen" hidden="{{!showSearch}}">
+    <view class="search-top">
+      <view class="search-bar">
+        <input
+          class="search-input"
+          placeholder="输入地点名称"
+          placeholder-class="search-ph"
+          confirm-type="search"
+          focus="{{searchFocus}}"
+          bindinput="onKeyword"
+          bindconfirm="onConfirm"
+        />
+      </view>
+      <view class="search-cancel" wx:if="{{picked}}" bind:tap="closeSearch">取消</view>
+    </view>
+
+    <scroll-view class="search-list" scroll-y show-scrollbar="{{false}}">
+      <view class="search-blank" wx:if="{{!pois.length && !searching && !emptyHint}}">
+        <view class="blank-title">搜一个地点</view>
+        <view class="blank-sub">输入景区、酒店、餐厅或地址</view>
+      </view>
+      <view class="search-blank" wx:elif="{{searching}}">
+        <view class="blank-sub">正在搜索…</view>
+      </view>
+      <view class="search-blank" wx:elif="{{emptyHint}}">
+        <view class="blank-title">没有找到</view>
+        <view class="blank-sub">换个更具体的名字试试</view>
+      </view>
+      <view wx:else>
+        <view
+          class="poi"
+          wx:for="{{pois}}"
+          wx:key="index"
+          hover-class="poi-hover"
+          bind:tap="pickPoi"
+          data-i="{{index}}"
+        >
+          <view class="poi-name">{{item.name}}</view>
+          <view class="poi-addr">{{item.address || '无详细地址'}}</view>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+
+  <view class="rest" hidden="{{showSearch || !picked}}">
+    <view class="picked-card" bind:tap="openSearch">
+      <view class="picked-main">
+        <view class="picked-k">已选地点</view>
+        <view class="picked-name">{{place_name}}</view>
+        <view class="picked-addr" wx:if="{{place_address}}">{{place_address}}</view>
+      </view>
+      <view class="picked-change">更换</view>
+    </view>
+
+    <view class="map-shell">
+      <map
+        id="pickMap"
+        class="pick-map"
+        latitude="{{mapLat}}"
+        longitude="{{mapLng}}"
+        scale="15"
+        markers="{{markers}}"
+        enable-zoom="{{true}}"
+        enable-scroll="{{true}}"
+        enable-rotate="{{false}}"
+        enable-overlooking="{{false}}"
+        enable-poi="{{false}}"
+        show-location="{{false}}"
+      />
+    </view>
+
+    <view class="form-card">
+      <view class="form-title">行程资料</view>
+
+      <view class="block-label">类型</view>
+      <view class="chip-row">
+        <view
+          class="chip {{point_type === item.value ? 'on' : ''}}"
+          wx:for="{{pointTypes}}"
+          wx:key="value"
+          bind:tap="setType"
+          data-v="{{item.value}}"
+        >{{item.label}}</view>
+      </view>
+
+      <view class="block-label" wx:if="{{showTraffic}}">怎么来</view>
+      <view class="chip-row" wx:if="{{showTraffic}}">
+        <view
+          class="chip {{traffic_type === item.value ? 'on' : ''}}"
+          wx:for="{{trafficTypes}}"
+          wx:key="value"
+          bind:tap="setTraffic"
+          data-v="{{item.value}}"
+        >{{item.label}}</view>
+      </view>
+
+      <view class="field">
+        <view class="field-k">备注</view>
+        <input
+          class="field-v"
+          placeholder="可选"
+          placeholder-class="field-ph"
+          value="{{remark}}"
+          bindinput="onRemark"
+        />
+      </view>
+    </view>
+
+    <view class="save-btn" bind:tap="submit">{{isEdit ? '保存' : (isVia ? '加入途经点' : '加入行程')}}</view>
+    <view class="del-btn" wx:if="{{isEdit}}" bind:tap="remove">删除</view>
+  </view>
+</view>

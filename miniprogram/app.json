@@ -1,0 +1,82 @@
+{
+  "pages": [
+    "pages/boot/boot",
+    "pages/index/index",
+    "pages/profile/profile",
+    "pages/login/login",
+    "pages/travel/create",
+    "pages/travel/join",
+    "pages/travel/home",
+    "pages/plan/edit",
+    "pages/plan/day-map",
+    "pages/bill/edit",
+    "pages/settle/settle",
+    "pages/mine/history",
+    "pages/mine/privacy",
+    "pages/mine/about"
+  ],
+  "window": {
+    "navigationBarTitleText": "结伴出行",
+    "navigationBarBackgroundColor": "#F5F7FB",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#F5F7FB",
+    "backgroundTextStyle": "dark"
+  },
+  "tabBar": {
+    "color": "#8B8B8B",
+    "selectedColor": "#0052D9",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "旅途",
+        "iconPath": "assets/tab-trip.png",
+        "selectedIconPath": "assets/tab-trip-active.png"
+      },
+      {
+        "pagePath": "pages/profile/profile",
+        "text": "我的",
+        "iconPath": "assets/tab-me.png",
+        "selectedIconPath": "assets/tab-me-active.png"
+      }
+    ]
+  },
+  "usingComponents": {
+    "t-button": "tdesign-miniprogram/button/button",
+    "t-icon": "tdesign-miniprogram/icon/icon",
+    "t-cell": "tdesign-miniprogram/cell/cell",
+    "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
+    "t-tag": "tdesign-miniprogram/tag/tag",
+    "t-tabs": "tdesign-miniprogram/tabs/tabs",
+    "t-tab-panel": "tdesign-miniprogram/tab-panel/tab-panel",
+    "t-empty": "tdesign-miniprogram/empty/empty",
+    "t-fab": "tdesign-miniprogram/fab/fab",
+    "t-input": "tdesign-miniprogram/input/input",
+    "t-textarea": "tdesign-miniprogram/textarea/textarea",
+    "t-switch": "tdesign-miniprogram/switch/switch",
+    "t-avatar": "tdesign-miniprogram/avatar/avatar",
+    "t-divider": "tdesign-miniprogram/divider/divider",
+    "t-radio": "tdesign-miniprogram/radio/radio",
+    "t-radio-group": "tdesign-miniprogram/radio-group/radio-group",
+    "t-checkbox": "tdesign-miniprogram/checkbox/checkbox",
+    "t-checkbox-group": "tdesign-miniprogram/checkbox-group/checkbox-group",
+    "t-date-time-picker": "tdesign-miniprogram/date-time-picker/date-time-picker",
+    "t-picker": "tdesign-miniprogram/picker/picker",
+    "t-popup": "tdesign-miniprogram/popup/popup",
+    "t-dialog": "tdesign-miniprogram/dialog/dialog",
+    "t-loading": "tdesign-miniprogram/loading/loading",
+    "t-progress": "tdesign-miniprogram/progress/progress",
+    "t-image": "tdesign-miniprogram/image/image",
+    "t-navbar": "tdesign-miniprogram/navbar/navbar",
+    "t-message": "tdesign-miniprogram/message/message"
+  },
+  "permission": {
+    "scope.userLocation": {
+      "desc": "用于选择行程地点并在地图上展示路线"
+    }
+  },
+  "requiredPrivateInfos": ["chooseLocation", "getLocation"],
+  "lazyCodeLoading": "requiredComponents",
+  "sitemapLocation": "sitemap.json"
+}

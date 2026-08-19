@@ -1,0 +1,9 @@
+<view class="page">
+  <view class="card">
+    <view class="title">结伴出行</view>
+    <view class="muted" style="margin-top: 12rpx">多人旅行行程规划 · 智能记账分账</view>
+    <view class="muted" style="margin-top: 24rpx">V1.0 初版</view>
+    <view class="muted">前端：微信原生小程序 + TDesign</view>
+    <view class="muted">后端：Rust Axum + PostgreSQL</view>
+  </view>
+</view>
