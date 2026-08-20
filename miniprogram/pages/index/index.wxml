@@ -22,10 +22,14 @@
         <view class="trip-main">
           <view class="trip-title-row">
             <view class="trip-title">{{item.travel_name}}</view>
-            <view class="soft-pill">{{item.status_text}}</view>
+            <view class="pill-row">
+              <view class="soft-pill sample" wx:if="{{item.is_sample}}">示例</view>
+              <view class="soft-pill">{{item.status_text}}</view>
+            </view>
           </view>
           <view class="trip-place">{{item.destination}}</view>
           <view class="trip-date">{{item.rangeText}}</view>
+          <view class="trip-hint" wx:if="{{item.is_sample}}">只读示例，可看行程和分账；新建旅途后不再显示</view>
         </view>
       </view>
       <view class="trip-meta">

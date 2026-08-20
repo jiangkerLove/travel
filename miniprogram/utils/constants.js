@@ -34,6 +34,10 @@ const PRESET_PLACES = [
   { name: '青城山', longitude: 103.57, latitude: 30.9, point_type: 'sight' },
   { name: '四姑娘山双桥沟', longitude: 102.9, latitude: 31.108, point_type: 'sight' },
   { name: '日隆镇', longitude: 102.828, latitude: 30.99, point_type: 'hotel' },
+  { name: '甲居藏寨', longitude: 101.963, latitude: 30.951, point_type: 'sight' },
+  { name: '丹巴县城', longitude: 101.891, latitude: 30.877, point_type: 'hotel' },
+  { name: '新都桥', longitude: 101.491, latitude: 30.043, point_type: 'sight' },
+  { name: '泸定桥', longitude: 102.234, latitude: 29.914, point_type: 'sight' },
 ]
 
 function pointMeta(type) {
@@ -127,31 +131,143 @@ function linesToPolyline(lines, points) {
         color,
         width: dotted ? 4 : 6,
         dottedLine: dotted,
-        arrowLine: true,
+        // arrowLine 在部分安卓机会导致地图区域持续闪烁
+        arrowLine: false,
       }
     })
     .filter(Boolean)
 }
 
-function toMarkers(points) {
-  return (points || [])
+/** 坐标几乎相同的点，仅在地图展示时轻微错开（不改真实坐标） */
+function spreadOverlappingPoints(points) {
+  const list = (points || [])
     .filter((p) => p.latitude && p.longitude)
-    .map((p, i) => ({
-      id: p.id,
+    .map((p) => ({ ...p }))
+  const groups = {}
+  list.forEach((p, i) => {
+    const key = `${Number(p.latitude).toFixed(5)},${Number(p.longitude).toFixed(5)}`
+    if (!groups[key]) groups[key] = []
+    groups[key].push(i)
+  })
+  Object.keys(groups).forEach((key) => {
+    const idxs = groups[key]
+    if (idxs.length < 2) return
+    const baseLat = Number(list[idxs[0]].latitude)
+    const baseLng = Number(list[idxs[0]].longitude)
+    const cos = Math.max(0.2, Math.cos((baseLat * Math.PI) / 180))
+    idxs.forEach((idx, j) => {
+      const ring = Math.floor(j / 6)
+      const pos = j % 6
+      const inRing = Math.min(6, idxs.length - ring * 6)
+      const angle = (2 * Math.PI * pos) / inRing - Math.PI / 2
+      // ~30m 起，多点再扩一圈，避免针和气泡叠死
+      const radius = 0.00032 * (ring + 1)
+      list[idx].latitude = baseLat + radius * Math.cos(angle)
+      list[idx].longitude = baseLng + (radius * Math.sin(angle)) / cos
+      list[idx]._spread = true
+    })
+  })
+  return list
+}
+
+function toMarkers(points, opts) {
+  const markStart = !!(opts && opts.markStart)
+  return spreadOverlappingPoints(points).map((p, i) => {
+    const name = String(p.place_name || p.name || '').trim()
+    const short = name.length > 10 ? `${name.slice(0, 10)}…` : name
+    const isStart = !!(p.isStart || (markStart && i === 0))
+    let content = short ? `${i + 1}. ${short}` : String(i + 1)
+    if (isStart) content = short ? `起点 · ${short}` : '起点'
+    return {
+      id: Number(p.id) || i + 1,
       latitude: Number(p.latitude),
       longitude: Number(p.longitude),
-      width: 22,
-      height: 22,
+      width: isStart ? 28 : 22,
+      height: isStart ? 42 : 34,
+      anchor: { x: 0.5, y: 1 },
+      zIndex: isStart ? 99 : i + 1,
       callout: {
-        content: `${i + 1}. ${p.place_name}`,
+        content,
         display: 'ALWAYS',
         padding: 6,
         borderRadius: 8,
-        fontSize: 12,
-        color: '#1A1A1A',
-        bgColor: '#FFFFFF',
+        fontSize: isStart ? 12 : 11,
+        color: isStart ? '#ffffff' : '#2f3d36',
+        bgColor: isStart ? '#6f9b88' : '#ffffff',
+        borderWidth: 1,
+        borderColor: isStart ? '#5d8a76' : '#d7e4dc',
+        textAlign: 'center',
       },
+    }
+  })
+}
+
+/** includePoints 用：把起点往视野里收一点，避免贴边/气泡被裁掉像「没点」 */
+function fitPointsForMap(points) {
+  const pts = (points || [])
+    .filter((p) => p.latitude && p.longitude)
+    .map((p) => ({
+      latitude: Number(p.latitude),
+      longitude: Number(p.longitude),
     }))
+  if (!pts.length) return pts
+  if (pts.length === 1) {
+    const s = pts[0]
+    const pad = 0.08
+    return [
+      s,
+      { latitude: s.latitude + pad, longitude: s.longitude },
+      { latitude: s.latitude - pad, longitude: s.longitude },
+      { latitude: s.latitude, longitude: s.longitude + pad },
+      { latitude: s.latitude, longitude: s.longitude - pad },
+    ]
+  }
+  const start = pts[0]
+  let latSum = 0
+  let lngSum = 0
+  pts.forEach((p) => {
+    latSum += p.latitude
+    lngSum += p.longitude
+  })
+  const cLat = latSum / pts.length
+  const cLng = lngSum / pts.length
+  const dLat = start.latitude - cLat
+  const dLng = start.longitude - cLng
+  const dist = Math.sqrt(dLat * dLat + dLng * dLng) || 0.05
+  // 起点外侧再扩一截，保证第一天「远起点」也落在框内
+  pts.push({
+    latitude: start.latitude + dLat * 0.35,
+    longitude: start.longitude + dLng * 0.35,
+  })
+  const pad = Math.max(0.06, Math.min(dist * 0.12, 0.35))
+  pts.push(
+    { latitude: start.latitude + pad, longitude: start.longitude },
+    { latitude: start.latitude - pad, longitude: start.longitude },
+    { latitude: start.latitude, longitude: start.longitude + pad },
+    { latitude: start.latitude, longitude: start.longitude - pad },
+  )
+  return pts
+}
+
+/** 当天列表点 + 跨天出发起点（有坐标才拼上） */
+function withDayStart(plans, startFrom) {
+  const list = (plans || []).slice()
+  if (!startFrom || !startFrom.latitude || !startFrom.longitude) return list
+  const first = list[0]
+  if (first && String(first.place_name || '').trim() === String(startFrom.place_name || '').trim()) {
+    return list
+  }
+  return [
+    {
+      id: startFrom.id || -1,
+      place_name: startFrom.place_name,
+      latitude: startFrom.latitude,
+      longitude: startFrom.longitude,
+      point_type: startFrom.point_type || 'hotel',
+      isStart: true,
+    },
+    ...list,
+  ]
 }
 
 module.exports = {
@@ -167,5 +283,7 @@ module.exports = {
   withLegHints,
   linesToPolyline,
   toMarkers,
+  withDayStart,
+  fitPointsForMap,
   openMap,
 }

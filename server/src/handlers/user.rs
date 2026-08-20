@@ -112,6 +112,12 @@ pub async fn login(
         .await?
     };
 
+    if crate::sample::should_grant_sample(&open_id) {
+        if let Err(e) = crate::sample::ensure_sample_travel(&state.pool, user.id).await {
+            tracing::warn!("写入示例攻略失败: {e}");
+        }
+    }
+
     let token = make_token(user.id, &state.jwt_secret)?;
     Ok(ok(LoginVo {
         token,

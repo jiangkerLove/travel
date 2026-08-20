@@ -17,13 +17,16 @@ const api = {
   travelRemove: (data) => request({ url: '/api/travel/remove', method: 'POST', data }),
   travelPerm: (data) => request({ url: '/api/travel/perm', method: 'POST', data }),
 
-  planList: (travel_id, day_num) =>
-    request({
-      url: `/api/plan/list?travel_id=${travel_id}${day_num ? `&day_num=${day_num}` : ''}`,
-    }),
+  planList: (travel_id, day_num, routes = true) => {
+    let url = `/api/plan/list?travel_id=${travel_id}`
+    if (day_num) url += `&day_num=${day_num}`
+    if (!routes) url += '&routes=0'
+    return request({ url })
+  },
   planSave: (data) => request({ url: '/api/plan/save', method: 'POST', data }),
   planDel: (id) => request({ url: '/api/plan/del', method: 'POST', data: { id } }),
   planSort: (data) => request({ url: '/api/plan/sort', method: 'POST', data }),
+  planMove: (data) => request({ url: '/api/plan/move', method: 'POST', data }),
   mapGlobal: (travel_id) => request({ url: `/api/map/global?travel_id=${travel_id}` }),
   mapDay: (travel_id, day_num) => request({ url: `/api/map/day?travel_id=${travel_id}&day_num=${day_num}` }),
   mapSearch: (q, lng, lat) => {

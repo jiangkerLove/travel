@@ -104,6 +104,10 @@ pub fn can_write_bill(m: &MemberRow) -> bool {
 
 pub async fn require_editor(pool: &PgPool, travel_id: i64, user_id: i64) -> Result<MemberRow, AppError> {
     let m = require_member(pool, travel_id, user_id).await?;
+    let t = find_travel(pool, travel_id).await?;
+    if t.status == 2 || crate::sample::is_sample_remark(&t.remark) {
+        return Err(AppError::Forbidden("已归档旅途仅可查看".into()));
+    }
     if !can_edit_plan(&m) {
         return Err(AppError::Forbidden("没有改行程权限".into()));
     }
@@ -112,6 +116,10 @@ pub async fn require_editor(pool: &PgPool, travel_id: i64, user_id: i64) -> Resu
 
 pub async fn require_biller(pool: &PgPool, travel_id: i64, user_id: i64) -> Result<MemberRow, AppError> {
     let m = require_member(pool, travel_id, user_id).await?;
+    let t = find_travel(pool, travel_id).await?;
+    if t.status == 2 || crate::sample::is_sample_remark(&t.remark) {
+        return Err(AppError::Forbidden("已归档旅途仅可查看".into()));
+    }
     if !can_write_bill(&m) {
         return Err(AppError::Forbidden("没有记账权限".into()));
     }

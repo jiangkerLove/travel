@@ -1,0 +1,10 @@
+.pill-row {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.status-pill.sample {
+  background: #e7f1eb;
+  color: #5d8a76;
+}

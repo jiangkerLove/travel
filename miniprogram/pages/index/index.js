@@ -63,6 +63,10 @@ Page({
       wx.showToast({ title: '还没有改行程权限', icon: 'none' })
       return
     }
-    wx.navigateTo({ url: `/pages/travel/home?id=${id}&mode=${mode || 'browse'}` })
+    const name = encodeURIComponent((item && item.travel_name) || '')
+    const dest = encodeURIComponent((item && item.destination) || '')
+    wx.navigateTo({
+      url: `/pages/travel/home?id=${id}&mode=${mode || 'browse'}&name=${name}&dest=${dest}`,
+    })
   },
 })

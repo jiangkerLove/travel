@@ -9,6 +9,12 @@ Page({
     this.setData({ list: list || [] })
   },
   openTrip(e) {
-    wx.navigateTo({ url: `/pages/travel/home?id=${e.currentTarget.dataset.id}&mode=browse` })
+    const id = e.currentTarget.dataset.id
+    const item = (this.data.list || []).find((t) => t.id === Number(id))
+    const name = encodeURIComponent((item && item.travel_name) || '')
+    const dest = encodeURIComponent((item && item.destination) || '')
+    wx.navigateTo({
+      url: `/pages/travel/home?id=${id}&mode=browse&name=${name}&dest=${dest}`,
+    })
   },
 })

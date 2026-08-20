@@ -1,150 +1,217 @@
 <view class="home" wx:if="{{trip.id}}">
-  <view class="hero">
-    <view class="hero-place">{{trip.destination}}</view>
-    <view class="hero-name">{{trip.travel_name}}</view>
-    <view class="hero-date">{{trip.start_date}} 至 {{trip.end_date}}</view>
-  </view>
+  <view class="top-fixed">
+    <view class="hero">
+      <view class="hero-title">{{trip.travel_name}}</view>
+      <view class="hero-meta" wx:if="{{trip.destination}}">
+        {{trip.destination}}<text wx:if="{{trip.start_date}}"> · {{trip.start_date}} – {{trip.end_date}}</text>
+      </view>
+      <view class="hero-meta" wx:if="{{trip.is_sample}}">示例攻略 · 仅供查看，不可编辑</view>
+    </view>
 
-  <view class="tabs" wx:if="{{mode === 'edit'}}">
-    <view class="tab {{tab === 'plan' ? 'on' : ''}}" bind:tap="setTab" data-v="plan">行程</view>
-    <view class="tab {{tab === 'map' ? 'on' : ''}}" bind:tap="setTab" data-v="map">路书</view>
-  </view>
-  <view class="tabs" wx:else>
-    <view class="tab {{tab === 'plan' ? 'on' : ''}}" bind:tap="setTab" data-v="plan">行程</view>
-    <view class="tab {{tab === 'map' ? 'on' : ''}}" bind:tap="setTab" data-v="map">路书</view>
-    <view class="tab {{tab === 'bill' ? 'on' : ''}}" wx:if="{{canBill}}" bind:tap="setTab" data-v="bill">账单</view>
-    <view class="tab {{tab === 'member' ? 'on' : ''}}" bind:tap="setTab" data-v="member">成员</view>
-  </view>
+    <view class="map-wrap">
+      <map
+        id="dayMap"
+        class="day-map"
+        latitude="{{mapLat}}"
+        longitude="{{mapLng}}"
+        scale="10"
+        markers="{{markers}}"
+        polyline="{{polyline}}"
+        show-location="{{false}}"
+        enable-poi="{{false}}"
+        enable-3D="{{false}}"
+        enable-overlooking="{{false}}"
+        enable-traffic="{{false}}"
+        enable-building="{{false}}"
+        bindmarkertap="onMarker"
+      />
+    </view>
 
-  <view wx:if="{{tab === 'plan'}}">
-    <scroll-view scroll-x class="days" enhanced show-scrollbar="{{false}}">
+    <scroll-view scroll-x class="days" show-scrollbar="{{false}}">
       <view
-        class="day-chip {{dayIndex === index ? 'on' : ''}}"
+        class="day-chip {{mapScope === 'all' ? 'on' : ''}}"
+        bind:tap="switchAll"
+      >
+        <text class="day-n">全程</text>
+      </view>
+      <view
+        class="day-chip {{mapScope === 'day' && dayIndex === index ? 'on' : ''}}"
         wx:for="{{days}}"
         wx:key="day_num"
         bind:tap="switchDay"
         data-index="{{index}}"
       >
-        <view class="day-n">D{{item.day_num}}</view>
-        <view class="day-d">{{item.shortDate}}</view>
+        <text class="day-n">D{{item.day_num}}</text>
+        <text class="day-d">{{item.shortDate}}</text>
+        <text class="day-c" wx:if="{{item.plans.length}}">{{item.plans.length}}</text>
       </view>
     </scroll-view>
 
-    <view class="plan-row is-start" wx:if="{{currentDay.startFrom}}">
-      <view class="plan-main">
-        <view class="plan-name">{{currentDay.startFrom.place_name}}</view>
-        <view class="plan-sub">D{{currentDay.startFrom.day_num}} 停留 · 今天从这里出发</view>
-      </view>
+    <view class="tabs" wx:if="{{mode === 'browse'}}">
+      <view class="tab {{tab === 'plan' ? 'on' : ''}}" bind:tap="setTab" data-v="plan">行程</view>
+      <view class="tab {{tab === 'bill' ? 'on' : ''}}" bind:tap="setTab" data-v="bill">账单</view>
+      <view class="tab {{tab === 'member' ? 'on' : ''}}" bind:tap="setTab" data-v="member">成员</view>
     </view>
-
-    <view class="empty-card" wx:if="{{!currentDay.plans.length}}">
-      <view class="empty-mark">🍃</view>
-      <view class="empty-title">{{mode === 'edit' ? (currentDay.startFrom ? '接着往下排' : '这一天还是空的') : '这一天还没有行程'}}</view>
-      <view class="empty-sub">{{mode === 'edit' ? (currentDay.startFrom ? '起点已接上昨天最后停留的地方' : '先选一个地点，再慢慢排') : '路线由团长或有权限的同伴来排'}}</view>
-      <view class="soft-btn main" wx:if="{{mode === 'edit'}}" bind:tap="quickAddEnd">{{currentDay.startFrom ? '去下一站' : '开始选点'}}</view>
+    <view class="edit-banner" wx:else>
+      <text wx:if="{{!routesReady}}">排点中 · 预览后看路线与用时</text>
+      <text wx:else>已预览 · 改点后需再预览</text>
     </view>
+  </view>
 
-    <view class="plan-list" wx:else>
-      <view
-        class="plan-row {{item.point_type === 'via' ? 'is-via' : ''}} {{dragIndex === index ? 'lift' : ''}}"
-        wx:for="{{currentDay.plans}}"
-        wx:key="id"
-      >
-        <view class="plan-main" bind:tap="editPlan" data-id="{{item.id}}">
-          <view class="plan-name">{{item.place_name}}</view>
-          <view class="plan-sub">{{item.typeLabel}}{{item.arriveText ? ' · ' + item.arriveText : ''}}</view>
+  <scroll-view
+    class="body-scroll {{mode === 'edit' ? 'with-bar' : ''}}"
+    scroll-y
+    show-scrollbar="{{false}}"
+  >
+    <view wx:if="{{tab === 'plan' || mode === 'edit'}}" class="body-pad">
+      <!-- 全程预览 -->
+      <block wx:if="{{mapScope === 'all'}}">
+        <view class="empty-card" wx:if="{{!days.length}}">
+          <view class="empty-title">还没有行程</view>
         </view>
-        <view
-          class="plan-handle"
-          wx:if="{{mode === 'edit'}}"
-          catchtouchstart="onDragStart"
-          catchtouchmove="onDragMove"
-          catchtouchend="onDragEnd"
-          catchtouchcancel="onDragEnd"
-          data-index="{{index}}"
-        >⋮⋮</view>
-      </view>
-    </view>
+        <block wx:for="{{days}}" wx:for-item="day" wx:key="day_num">
+          <view class="day-sec">D{{day.day_num}} · {{day.shortDate}}</view>
+          <view class="empty-mini" wx:if="{{!day.plans.length}}">这一天还空着</view>
+          <view
+            class="plan-row {{p.point_type === 'via' ? 'is-via' : ''}}"
+            wx:for="{{day.plans}}"
+            wx:for-item="p"
+            wx:key="id"
+          >
+            <view class="plan-main" bind:tap="editPlan" data-id="{{p.id}}">
+              <view class="plan-name">{{p.place_name}}</view>
+              <view class="plan-sub">
+                {{p.typeLabel}}
+                <text wx:if="{{routesReady && p.arriveText}}"> · {{p.arriveText}}</text>
+              </view>
+              <view class="plan-leg" wx:if="{{routesReady && p.legHint}}">下一段 {{p.legHint}}</view>
+            </view>
+          </view>
+        </block>
+        <view class="fab-space" wx:if="{{mode === 'edit'}}"></view>
+      </block>
 
-    <view class="fab-wrap" wx:if="{{mode === 'edit'}}">
-      <t-fab icon="add" bind:click="quickAddEnd" />
-    </view>
-  </view>
-
-  <view hidden="{{tab !== 'map'}}">
-    <map
-      id="routeMap"
-      class="map"
-      latitude="{{mapLat}}"
-      longitude="{{mapLng}}"
-      scale="8"
-      markers="{{markers}}"
-      polyline="{{polyline}}"
-      bindmarkertap="onMarker"
-    />
-    <view class="place-card" wx:for="{{visiblePoints}}" wx:key="id" bind:tap="focusPoint" data-id="{{item.id}}">
-      <view class="place-name">{{item.place_name}}</view>
-      <view class="place-sub">D{{item.day_num}} · {{item.typeLabel}}{{item.legHint ? ' · ' + item.legHint : ''}}</view>
-    </view>
-  </view>
-
-  <view wx:if="{{mode === 'browse' && canBill && tab === 'bill'}}">
-    <view class="stat-grid">
-      <view class="stat"><view class="stat-k">公共</view><view class="stat-v">¥{{stat.public_total || 0}}</view></view>
-      <view class="stat"><view class="stat-k">我的</view><view class="stat-v">¥{{stat.private_total || 0}}</view></view>
-      <view class="stat"><view class="stat-k">人均</view><view class="stat-v">¥{{stat.avg_public || 0}}</view></view>
-    </view>
-    <view class="place-card" wx:if="{{stat.categories && stat.categories.length}}">
-      <view class="cat" wx:for="{{stat.categories}}" wx:key="cost_type">
-        <text>{{item.label}}</text>
-        <text>¥{{item.amount}}</text>
-      </view>
-    </view>
-    <view class="soft-btn" bind:tap="goSettle">查看分账</view>
-    <view class="place-card bill" wx:for="{{bills}}" wx:key="id" bind:tap="editBill" data-id="{{item.id}}">
-      <view class="bill-row">
-        <view class="bill-main">
-          <view class="place-name">{{item.bill_name}}</view>
-          <view class="place-sub">{{item.pay_nickname}} 付 · {{item.bill_type === 1 ? '集体' : '个人'}}</view>
-        </view>
-        <view class="bill-amt">¥{{item.amount}}</view>
-      </view>
-    </view>
-    <view class="empty-card" wx:if="{{!bills.length}}">
-      <view class="empty-title">还没有账单</view>
-      <view class="empty-sub">餐饮购物都可以直接记</view>
-    </view>
-    <view class="fab-wrap">
-      <t-fab icon="add" bind:click="addBill" />
-    </view>
-  </view>
-
-  <view wx:if="{{mode === 'browse' && tab === 'member'}}">
-    <view class="place-card invite">
-      <view>
-        <view class="stat-k">邀请码</view>
-        <view class="hero-name" style="font-size: 40rpx">{{trip.invite_code}}</view>
-      </view>
-      <view class="soft-btn mini" bind:tap="copyCode">复制</view>
-    </view>
-    <view class="place-card member" wx:for="{{members}}" wx:key="user_id">
-      <view class="member-top">
-        <view class="member-main">
-          <t-avatar size="small" image="{{item.avatar}}" />
-          <view>
-            <view class="place-name">{{item.nickname}}</view>
-            <view class="place-sub">{{item.perm_text || item.role_text}}</view>
+      <!-- 单日 -->
+      <block wx:else>
+        <view class="plan-row is-start" wx:if="{{currentDay.startFrom}}">
+          <view class="plan-main">
+            <view class="plan-name">{{currentDay.startFrom.place_name}}</view>
+            <view class="plan-sub">D{{currentDay.startFrom.day_num}} 停留 · 今天从这里出发{{currentDay.startHint && routesReady ? ' · ' + currentDay.startHint : ''}}</view>
           </view>
         </view>
-        <text class="danger" wx:if="{{trip.role === 1 && item.role !== 1}}" bind:tap="removeMember" data-id="{{item.user_id}}">移除</text>
-      </view>
-      <view class="perm-row" wx:if="{{trip.role === 1 && item.role !== 1}}">
-        <view class="perm-chip {{item.can_edit ? 'on' : ''}}" catch:tap="togglePerm" data-id="{{item.user_id}}" data-k="can_edit">改行程</view>
-        <view class="perm-chip {{item.can_bill ? 'on' : ''}}" catch:tap="togglePerm" data-id="{{item.user_id}}" data-k="can_bill">记账</view>
-      </view>
+
+        <view class="empty-card" wx:if="{{!currentDay.plans.length}}">
+          <view class="empty-mark">🍃</view>
+          <view class="empty-title">{{mode === 'edit' ? (currentDay.startFrom ? '接着往下排' : '这一天还是空的') : '这一天还没有行程'}}</view>
+          <view class="empty-sub">{{mode === 'edit' ? (currentDay.startFrom ? '起点已接上昨天最后停留的地方' : '先选地点，可随时移到其他天') : '路线由团长或有权限的同伴来排'}}</view>
+          <view class="soft-btn main" wx:if="{{mode === 'edit'}}" bind:tap="quickAddEnd">{{currentDay.startFrom ? '去下一站' : '开始选点'}}</view>
+        </view>
+
+        <view class="plan-list" wx:else>
+          <view
+            class="plan-row {{item.point_type === 'via' ? 'is-via' : ''}} {{dragIndex === index ? 'lift' : ''}} {{index === 0 && !currentDay.startFrom ? 'is-start' : ''}}"
+            wx:for="{{currentDay.plans}}"
+            wx:key="id"
+          >
+            <view class="plan-main" bind:tap="editPlan" data-id="{{item.id}}">
+              <view class="plan-name">{{index === 0 && !currentDay.startFrom ? '起点 · ' : ''}}{{item.place_name}}</view>
+              <view class="plan-sub">
+                {{item.typeLabel}}{{index === 0 && !currentDay.startFrom && !item.latitude ? ' · 还没标坐标' : ''}}
+                <text wx:if="{{routesReady && item.arriveText}}"> · {{item.arriveText}}</text>
+              </view>
+              <view class="plan-tip" wx:if="{{item.remark}}">{{item.remark}}</view>
+              <view class="plan-leg" wx:if="{{routesReady && item.legHint}}">下一段 {{item.legHint}}</view>
+            </view>
+            <view
+              class="plan-more"
+              wx:if="{{mode === 'edit'}}"
+              catch:tap="onMorePlan"
+              data-id="{{item.id}}"
+            >⋯</view>
+            <view
+              class="plan-handle"
+              wx:if="{{mode === 'edit'}}"
+              catchtouchstart="onDragStart"
+              catchtouchmove="onDragMove"
+              catchtouchend="onDragEnd"
+              catchtouchcancel="onDragEnd"
+              data-index="{{index}}"
+            >⋮⋮</view>
+          </view>
+        </view>
+
+        <view class="fab-space" wx:if="{{mode === 'edit'}}"></view>
+      </block>
     </view>
-    <view class="soft-btn" wx:if="{{trip.role === 1}}" bind:tap="toggleLock">{{trip.is_lock ? '解锁结算' : '锁定结算'}}</view>
-    <view class="soft-btn ghost" wx:if="{{trip.role === 1}}" bind:tap="archive">归档旅途</view>
-    <view class="soft-btn ghost" wx:if="{{trip.role !== 1}}" bind:tap="quit">退出旅途</view>
+
+    <view wx:if="{{mode === 'browse' && tab === 'bill'}}" class="body-pad">
+      <view class="stat-grid">
+        <view class="stat"><view class="stat-k">公共</view><view class="stat-v">¥{{stat.public_total || 0}}</view></view>
+        <view class="stat"><view class="stat-k">我的</view><view class="stat-v">¥{{stat.private_total || 0}}</view></view>
+        <view class="stat"><view class="stat-k">人均</view><view class="stat-v">¥{{stat.avg_public || 0}}</view></view>
+      </view>
+      <view class="place-card" wx:if="{{stat.categories && stat.categories.length}}">
+        <view class="cat" wx:for="{{stat.categories}}" wx:key="cost_type">
+          <text>{{item.label}}</text>
+          <text>¥{{item.amount}}</text>
+        </view>
+      </view>
+      <view class="soft-btn" bind:tap="goSettle">查看分账</view>
+      <view class="place-card bill" wx:for="{{bills}}" wx:key="id" bind:tap="editBill" data-id="{{item.id}}">
+        <view class="bill-row">
+          <view class="bill-main">
+            <view class="place-name">{{item.bill_name}}</view>
+            <view class="place-sub">{{item.pay_nickname}} 付 · {{item.bill_type === 1 ? '集体' : '个人'}}</view>
+          </view>
+          <view class="bill-amt">¥{{item.amount}}</view>
+        </view>
+      </view>
+      <view class="empty-card" wx:if="{{!bills.length}}">
+        <view class="empty-title">还没有账单</view>
+        <view class="empty-sub">餐饮购物都可以直接记</view>
+      </view>
+      <view class="fab-space"></view>
+    </view>
+
+    <view wx:if="{{mode === 'browse' && tab === 'member'}}" class="body-pad">
+      <view class="place-card invite">
+        <view>
+          <view class="stat-k">邀请码</view>
+          <view class="invite-code">{{trip.invite_code}}</view>
+        </view>
+        <view class="soft-btn mini" bind:tap="copyCode">复制</view>
+      </view>
+      <view class="place-card member" wx:for="{{members}}" wx:key="user_id">
+        <view class="member-top">
+          <view class="member-main">
+            <t-avatar size="small" image="{{item.avatar}}" />
+            <view>
+              <view class="place-name">{{item.nickname}}</view>
+              <view class="place-sub">{{item.perm_text || item.role_text}}</view>
+            </view>
+          </view>
+          <text class="danger" wx:if="{{!trip.is_sample && trip.status !== 2 && trip.role === 1 && item.role !== 1}}" bind:tap="removeMember" data-id="{{item.user_id}}">移除</text>
+        </view>
+        <view class="perm-row" wx:if="{{!trip.is_sample && trip.status !== 2 && trip.role === 1 && item.role !== 1}}">
+          <view class="perm-chip {{item.can_edit ? 'on' : ''}}" catch:tap="togglePerm" data-id="{{item.user_id}}" data-k="can_edit">改行程</view>
+          <view class="perm-chip {{item.can_bill ? 'on' : ''}}" catch:tap="togglePerm" data-id="{{item.user_id}}" data-k="can_bill">记账</view>
+        </view>
+      </view>
+      <view class="soft-btn" wx:if="{{!trip.is_sample && trip.status !== 2 && trip.role === 1}}" bind:tap="toggleLock">{{trip.is_lock ? '解锁结算' : '锁定结算'}}</view>
+      <view class="soft-btn ghost" wx:if="{{!trip.is_sample && trip.status !== 2 && trip.role === 1}}" bind:tap="archive">归档旅途</view>
+      <view class="soft-btn ghost" wx:if="{{!trip.is_sample && trip.role !== 1}}" bind:tap="quit">退出旅途</view>
+    </view>
+  </scroll-view>
+
+  <view class="fab-wrap {{mode === 'edit' ? 'above-bar' : ''}}" wx:if="{{mode === 'edit'}}">
+    <t-fab icon="add" bind:click="quickAddEnd" />
+  </view>
+  <view class="fab-wrap" wx:if="{{mode === 'browse' && canBill && tab === 'bill'}}">
+    <t-fab icon="add" bind:click="addBill" />
+  </view>
+
+  <view class="edit-bar" wx:if="{{mode === 'edit'}}">
+    <view class="edit-bar-btn ghost" bind:tap="generateRoutes">{{routesReady ? '重新预览' : '预览行程'}}</view>
+    <view class="edit-bar-btn main" bind:tap="finishEdit">完成并保存</view>
   </view>
 </view>

@@ -12,7 +12,9 @@ Page({
     try {
       const t = await api.travelJoin(this.data.code)
       getApp().markTripsDirty()
-      wx.redirectTo({ url: `/pages/travel/home?id=${t.id}&mode=browse` })
+      wx.redirectTo({
+        url: `/pages/travel/home?id=${t.id}&mode=browse&name=${encodeURIComponent(t.travel_name || '')}&dest=${encodeURIComponent(t.destination || '')}`,
+      })
     } finally {
       wx.hideLoading()
     }

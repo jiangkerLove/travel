@@ -71,26 +71,26 @@
     </view>
 
     <view class="form-card">
-      <view class="form-title">行程资料</view>
+      <view class="form-title">地点资料</view>
 
-      <view class="block-label">类型</view>
-      <view class="chip-row">
+      <view class="block-label" wx:if="{{dayOptions.length > 1}}">安排在哪一天</view>
+      <view class="chip-row" wx:if="{{dayOptions.length > 1}}">
+        <view
+          class="chip {{day_num === item.day_num ? 'on' : ''}}"
+          wx:for="{{dayOptions}}"
+          wx:key="day_num"
+          bind:tap="setDay"
+          data-v="{{item.day_num}}"
+        >{{item.label}}</view>
+      </view>
+
+      <view class="block-label" wx:if="{{!isVia}}">类型</view>
+      <view class="chip-row" wx:if="{{!isVia}}">
         <view
           class="chip {{point_type === item.value ? 'on' : ''}}"
           wx:for="{{pointTypes}}"
           wx:key="value"
           bind:tap="setType"
-          data-v="{{item.value}}"
-        >{{item.label}}</view>
-      </view>
-
-      <view class="block-label" wx:if="{{showTraffic}}">怎么来</view>
-      <view class="chip-row" wx:if="{{showTraffic}}">
-        <view
-          class="chip {{traffic_type === item.value ? 'on' : ''}}"
-          wx:for="{{trafficTypes}}"
-          wx:key="value"
-          bind:tap="setTraffic"
           data-v="{{item.value}}"
         >{{item.label}}</view>
       </view>

@@ -23,7 +23,9 @@ Page({
         content: `邀请码 ${t.invite_code}，可分享给同行好友`,
         showCancel: false,
         success: () => {
-          wx.redirectTo({ url: `/pages/travel/home?id=${t.id}&mode=edit` })
+          wx.redirectTo({
+            url: `/pages/travel/home?id=${t.id}&mode=edit&name=${encodeURIComponent(t.travel_name || travel_name)}&dest=${encodeURIComponent(t.destination || destination)}`,
+          })
         },
       })
     } catch (e) {

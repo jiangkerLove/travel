@@ -125,6 +125,23 @@ page {
   flex-shrink: 0;
 }
 
+.pill-row {
+  display: flex;
+  gap: 8rpx;
+  flex-shrink: 0;
+}
+
+.soft-pill.sample {
+  color: #b45309;
+  background: #fff7ed;
+}
+
+.trip-hint {
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  color: #b08968;
+}
+
 .trip-place {
   margin-top: 6rpx;
   font-size: 26rpx;

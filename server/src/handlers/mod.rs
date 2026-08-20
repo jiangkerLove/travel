@@ -35,6 +35,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/plan/list", get(plan::list))
         .route("/api/plan/del", delete(plan::del).post(plan::del))
         .route("/api/plan/sort", post(plan::sort))
+        .route("/api/plan/move", post(plan::move_plan))
         .route("/api/map/global", get(plan::map_global))
         .route("/api/map/day", get(plan::map_day))
         .route("/api/map/search", get(plan::map_search))

@@ -36,6 +36,7 @@ pub struct TravelVo {
     pub creator_id: i64,
     pub is_lock: bool,
     pub remark: Option<String>,
+    pub is_sample: bool,
     pub member_count: i64,
     pub role: i16,
     pub can_edit: bool,
@@ -99,6 +100,8 @@ struct TravelListRow {
 }
 
 fn to_vo(t: &TravelRow, member_count: i64, role: i16, can_edit: bool, can_bill: bool) -> TravelVo {
+    let is_sample = crate::sample::is_sample_remark(&t.remark);
+    let read_only = is_sample || t.status == 2;
     TravelVo {
         id: t.id,
         travel_name: t.travel_name.clone(),
@@ -109,12 +112,13 @@ fn to_vo(t: &TravelRow, member_count: i64, role: i16, can_edit: bool, can_bill: 
         status: display_status(t.status, t.end_date),
         status_text: status_text(t.status, t.end_date).into(),
         creator_id: t.creator_id,
-        is_lock: t.is_lock,
+        is_lock: t.is_lock || is_sample,
         remark: t.remark.clone(),
+        is_sample,
         member_count,
         role,
-        can_edit: role == 1 || can_edit,
-        can_bill: role == 1 || can_bill,
+        can_edit: !read_only && (role == 1 || can_edit),
+        can_bill: !read_only && (role == 1 || can_bill),
         day_count: day_count(t.start_date, t.end_date),
     }
 }
@@ -211,24 +215,57 @@ pub async fn list(
     Query(q): Query<ListQ>,
 ) -> Result<Json<ApiOk<Vec<TravelVo>>>, AppError> {
     let archived = q.archived.unwrap_or(false);
-    let rows: Vec<TravelListRow> = sqlx::query_as(
-        r#"
-        SELECT t.id, t.travel_name, t.destination, t.start_date, t.end_date, t.invite_code,
-               t.status, t.creator_id, t.is_lock, t.remark,
-               (SELECT COUNT(*) FROM travel_member m2 WHERE m2.travel_id = t.id) AS member_count,
-               m.role, m.can_edit, m.can_bill
-        FROM travel t
-        JOIN travel_member m ON m.travel_id = t.id
-        WHERE m.user_id = $1 AND (
-            ($2 AND t.status = 2) OR (NOT $2 AND t.status <> 2)
+    let rows: Vec<TravelListRow> = if archived {
+        // 归档列表：不放示例攻略
+        sqlx::query_as(
+            r#"
+            SELECT t.id, t.travel_name, t.destination, t.start_date, t.end_date, t.invite_code,
+                   t.status, t.creator_id, t.is_lock, t.remark,
+                   (SELECT COUNT(*) FROM travel_member m2 WHERE m2.travel_id = t.id) AS member_count,
+                   m.role, m.can_edit, m.can_bill
+            FROM travel t
+            JOIN travel_member m ON m.travel_id = t.id
+            WHERE m.user_id = $1
+              AND t.status = 2
+              AND (t.remark IS NULL OR t.remark NOT LIKE '【示例攻略】%')
+            ORDER BY t.create_time DESC
+            "#,
         )
-        ORDER BY t.create_time DESC
-        "#,
-    )
-    .bind(user.id)
-    .bind(archived)
-    .fetch_all(&state.pool)
-    .await?;
+        .bind(user.id)
+        .fetch_all(&state.pool)
+        .await?
+    } else {
+        // 进行中：有真实行程时隐藏示例；没有时才展示示例
+        sqlx::query_as(
+            r#"
+            SELECT t.id, t.travel_name, t.destination, t.start_date, t.end_date, t.invite_code,
+                   t.status, t.creator_id, t.is_lock, t.remark,
+                   (SELECT COUNT(*) FROM travel_member m2 WHERE m2.travel_id = t.id) AS member_count,
+                   m.role, m.can_edit, m.can_bill
+            FROM travel t
+            JOIN travel_member m ON m.travel_id = t.id
+            WHERE m.user_id = $1
+              AND t.status <> 2
+              AND (
+                (t.remark IS NULL OR t.remark NOT LIKE '【示例攻略】%')
+                OR NOT EXISTS (
+                  SELECT 1
+                  FROM travel t2
+                  JOIN travel_member m2 ON m2.travel_id = t2.id
+                  WHERE m2.user_id = $1
+                    AND t2.status <> 2
+                    AND (t2.remark IS NULL OR t2.remark NOT LIKE '【示例攻略】%')
+                )
+              )
+            ORDER BY
+              CASE WHEN t.remark LIKE '【示例攻略】%' THEN 1 ELSE 0 END,
+              t.create_time DESC
+            "#,
+        )
+        .bind(user.id)
+        .fetch_all(&state.pool)
+        .await?
+    };
 
     Ok(ok(rows
         .into_iter()
@@ -312,6 +349,12 @@ pub async fn lock(
 ) -> Result<Json<ApiOk<TravelVo>>, AppError> {
     require_leader(&state.pool, req.travel_id, user.id).await?;
     let t = find_travel(&state.pool, req.travel_id).await?;
+    if crate::sample::is_sample_remark(&t.remark) {
+        return Err(AppError::BadRequest("示例旅途不可修改锁定状态".into()));
+    }
+    if t.status == 2 {
+        return Err(AppError::BadRequest("已归档旅途不可修改锁定状态".into()));
+    }
     let next = req.is_lock.unwrap_or(!t.is_lock);
     sqlx::query("UPDATE travel SET is_lock = $2 WHERE id = $1")
         .bind(req.travel_id)
@@ -371,6 +414,13 @@ pub async fn archive(
     Json(req): Json<TravelIdReq>,
 ) -> Result<Json<ApiOk<serde_json::Value>>, AppError> {
     require_leader(&state.pool, req.travel_id, user.id).await?;
+    let t = find_travel(&state.pool, req.travel_id).await?;
+    if crate::sample::is_sample_remark(&t.remark) {
+        return Err(AppError::BadRequest("示例旅途不可归档".into()));
+    }
+    if t.status == 2 {
+        return Err(AppError::BadRequest("旅途已归档".into()));
+    }
     sqlx::query("UPDATE travel SET status = 2 WHERE id = $1")
         .bind(req.travel_id)
         .execute(&state.pool)
@@ -434,6 +484,10 @@ pub async fn set_perm(
     Json(req): Json<PermReq>,
 ) -> Result<Json<ApiOk<MemberVo>>, AppError> {
     require_leader(&state.pool, req.travel_id, user.id).await?;
+    let t = find_travel(&state.pool, req.travel_id).await?;
+    if crate::sample::is_sample_remark(&t.remark) || t.status == 2 {
+        return Err(AppError::BadRequest("已归档旅途不可改权限".into()));
+    }
     if req.user_id == user.id {
         return Err(AppError::BadRequest("不用给自己改权限".into()));
     }

@@ -1,5 +1,5 @@
 const { api } = require('../../utils/api')
-const { POINT_TYPES, TRAFFIC_TYPES } = require('../../utils/constants')
+const { POINT_TYPES } = require('../../utils/constants')
 
 function pin(lat, lng) {
   if (!lat || !lng) return []
@@ -18,6 +18,7 @@ Page({
     id: null,
     after_id: null,
     day_num: 1,
+    dayOptions: [],
     point_type: 'sight',
     pois: [],
     searching: false,
@@ -33,20 +34,16 @@ Page({
     place_address: '',
     longitude: null,
     latitude: null,
-    traffic_type: '',
     remark: '',
-    pointTypes: POINT_TYPES,
-    trafficTypes: TRAFFIC_TYPES,
+    pointTypes: POINT_TYPES.filter((t) => t.value !== 'via'),
     isEdit: false,
     isVia: false,
-    showTraffic: false,
   },
   async onLoad(q) {
     const isVia = q.via === '1'
     this._keyword = ''
     this._seq = 0
     this._mapInited = false
-    this._trafficDuration = null
     this.setData({
       travel_id: Number(q.travel_id),
       day_num: Number(q.day_num || 1),
@@ -55,13 +52,16 @@ Page({
       isEdit: !!q.id,
       isVia,
       point_type: isVia ? 'via' : 'sight',
+      pointTypes: isVia
+        ? POINT_TYPES.filter((t) => t.value === 'via')
+        : POINT_TYPES.filter((t) => t.value !== 'via'),
     })
     wx.setNavigationBarTitle({
-      title: q.id ? '编辑行程' : (isVia ? '添加途经点' : '添加行程'),
+      title: q.id ? '编辑地点' : (isVia ? '添加途经点' : '添加地点'),
     })
     const trip = await api.travelDetail(this.data.travel_id)
-    if (!trip.can_edit) {
-      wx.showToast({ title: '没有改行程权限', icon: 'none' })
+    if (!trip.can_edit || trip.is_sample || Number(trip.status) === 2) {
+      wx.showToast({ title: '示例/归档旅途仅可查看', icon: 'none' })
       setTimeout(() => wx.navigateBack(), 500)
       return
     }
@@ -72,21 +72,21 @@ Page({
         this._aroundLat = r.latitude
       },
     })
-    const data = await api.planList(this.data.travel_id)
+    const data = await api.planList(this.data.travel_id, null, false)
     const days = data.days || []
-    const dayPlans = ((days.find((d) => d.day_num === this.data.day_num) || {}).plans || [])
+    const dayOptions = days.map((d) => ({
+      day_num: d.day_num,
+      label: `D${d.day_num}`,
+      date: (d.date || '').slice(5),
+    }))
+    this.setData({ dayOptions })
     if (q.id) {
       const all = days.flatMap((d) => d.plans || [])
       const p = all.find((i) => i.id === Number(q.id))
       if (p) {
-        const list = ((days.find((d) => d.day_num === p.day_num) || {}).plans || [])
-        const isFirst = !list.length || list[0].id === p.id
-        const prevLast = ((days.find((d) => d.day_num === p.day_num - 1) || {}).plans || []).slice(-1)[0]
-        const sameAsPrev = !!(prevLast && p.place_name === prevLast.place_name)
-        const showTraffic = !(isFirst && (p.day_num <= 1 || sameAsPrev))
         this._keyword = p.place_name || ''
-        this._trafficDuration = p.traffic_duration || null
         this._mapInited = true
+        this._origDay = p.day_num
         this.setData({
           day_num: p.day_num,
           point_type: p.point_type,
@@ -101,23 +101,20 @@ Page({
           mapLat: Number(p.latitude) || 30.67,
           mapLng: Number(p.longitude) || 104.06,
           markers: pin(p.latitude, p.longitude),
-          showTraffic,
-          traffic_type: showTraffic ? (p.traffic_type || 'drive') : '',
           remark: p.remark || '',
           isVia: p.point_type === 'via',
+          pointTypes: p.point_type === 'via'
+            ? POINT_TYPES.filter((t) => t.value === 'via')
+            : POINT_TYPES.filter((t) => t.value !== 'via'),
         })
       }
-      return
     }
-    const isTripStart = this.data.day_num <= 1 && !q.after_id && !dayPlans.length
-    const showTraffic = !isTripStart
-    this.setData({
-      showTraffic,
-      traffic_type: showTraffic ? 'drive' : '',
-    })
   },
   onUnload() {
     clearTimeout(this._timer)
+  },
+  setDay(e) {
+    this.setData({ day_num: Number(e.currentTarget.dataset.v) })
   },
   stopSearch() {
     clearTimeout(this._timer)
@@ -238,10 +235,6 @@ Page({
     })
   },
   setType(e) { this.setData({ point_type: e.currentTarget.dataset.v }) },
-  setTraffic(e) {
-    const v = e.currentTarget.dataset.v
-    this.setData({ traffic_type: this.data.traffic_type === v ? '' : v })
-  },
   onRemark(e) { this.setData({ remark: e.detail.value }) },
   async submit() {
     const d = this.data
@@ -259,11 +252,18 @@ Page({
         place_name: d.place_name,
         longitude: d.longitude,
         latitude: d.latitude,
-        traffic_type: d.showTraffic ? (d.traffic_type || null) : null,
-        traffic_duration: d.id ? this._trafficDuration : null,
+        traffic_type: 'drive',
+        traffic_duration: null,
         remark: d.remark,
         after_id: d.after_id,
       })
+      if (d.id && this._origDay && this._origDay !== d.day_num) {
+        await api.planMove({
+          travel_id: d.travel_id,
+          id: d.id,
+          day_num: d.day_num,
+        })
+      }
       wx.navigateBack()
     } finally {
       wx.hideLoading()

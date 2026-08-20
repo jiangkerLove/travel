@@ -4,6 +4,7 @@ mod error;
 mod handlers;
 mod poi;
 mod route;
+mod sample;
 mod settle;
 mod state;
 mod util;
