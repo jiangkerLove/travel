@@ -2,6 +2,10 @@
   "name": "jieban-chuxing",
   "private": true,
   "description": "旅途计划微信小程序",
+  "scripts": {
+    "build:npm": "node scripts/pack-npm.js",
+    "postinstall": "npm run build:npm"
+  },
   "dependencies": {
     "tdesign-miniprogram": "^1.16.0"
   }
