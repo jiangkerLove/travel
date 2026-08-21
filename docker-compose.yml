@@ -2,14 +2,77 @@ services:
   db:
     image: postgres:16-alpine
     container_name: travel-postgres
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: travel
-      POSTGRES_PASSWORD: travel
-      POSTGRES_DB: travel
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER:-travel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-travel}
+      POSTGRES_DB: ${POSTGRES_DB:-travel}
     volumes:
       - travel_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    # 仅本机开发需要连库时打开；生产建议注释，只走容器内网
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+
+  api:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    image: travel-api:latest
+    container_name: travel-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-travel}:${POSTGRES_PASSWORD:-travel}@db:5432/${POSTGRES_DB:-travel}
+      JWT_SECRET: ${JWT_SECRET:-travel-dev-secret-change-me}
+      WECHAT_APPID: ${WECHAT_APPID:-}
+      WECHAT_SECRET: ${WECHAT_SECRET:-}
+      AMAP_KEY: ${AMAP_KEY:-}
+      AMAP_SECRET: ${AMAP_SECRET:-}
+      # 仅容器内网监听，不对外映射
+      PORT: "3000"
+      DEV_MODE: ${DEV_MODE:-0}
+      RUST_LOG: ${RUST_LOG:-server=info,sqlx=warn,tower_http=info}
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 25s
+      retries: 5
+
+  # 唯一对外入口：路径分流后转到 api / 后续 admin
+  # 外层 Nginx 只需把 travel.jiangker.cn 端口转发到本机 PORT
+  gateway:
+    image: nginx:1.27-alpine
+    container_name: travel-gateway
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${PORT:-8080}:80"
+    volumes:
+      - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+
+  # 后续管理端（同域 /admin）：仅容器内网，不单独对外开端口
+  # admin:
+  #   profiles: ["admin"]
+  #   image: travel-admin:latest
+  #   container_name: travel-admin
+  #   restart: unless-stopped
+  #   environment:
+  #     PUBLIC_PATH: /admin
+  #     API_BASE: http://api:3000
+  #   expose:
+  #     - "80"
 
 volumes:
   travel_pgdata:
