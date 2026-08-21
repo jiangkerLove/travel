@@ -68,9 +68,11 @@ pub struct UpdateUserReq {
     pub avatar: Option<String>,
     pub default_bill_visible: Option<bool>,
     pub birthday: Option<String>,
-    pub gender: Option<i16>,
+    #[serde(default, alias = "femaleRole")]
     pub female_role: Option<i16>,
+    #[serde(default, alias = "workStartYear")]
     pub work_start_year: Option<i32>,
+    pub gender: Option<i16>,
 }
 
 #[derive(Deserialize)]
@@ -238,30 +240,31 @@ pub async fn update(
             return Err(AppError::BadRequest("参加工作年份不合法".into()));
         }
     }
-    let u = sqlx::query_as::<_, crate::db::UserRow>(&format!(
+    let sql = format!(
         r#"
         UPDATE app_user
-        SET nickname = COALESCE($2, nickname),
-            avatar = COALESCE($3, avatar),
-            default_bill_visible = COALESCE($4, default_bill_visible),
-            birthday = COALESCE($5, birthday),
-            gender = COALESCE($6, gender),
-            female_role = COALESCE($7, female_role),
-            work_start_year = COALESCE($8, work_start_year)
+        SET nickname = COALESCE($2::varchar, nickname),
+            avatar = COALESCE($3::varchar, avatar),
+            default_bill_visible = COALESCE($4::boolean, default_bill_visible),
+            birthday = COALESCE($5::date, birthday),
+            gender = COALESCE($6::smallint, gender),
+            female_role = COALESCE($7::smallint, female_role),
+            work_start_year = COALESCE($8::int, work_start_year)
         WHERE id = $1
         RETURNING {USER_COLS}
         "#
-    ))
-    .bind(user.id)
-    .bind(req.nickname.as_deref())
-    .bind(req.avatar.as_deref())
-    .bind(req.default_bill_visible)
-    .bind(birthday)
-    .bind(req.gender)
-    .bind(req.female_role)
-    .bind(req.work_start_year)
-    .fetch_one(&state.pool)
-    .await?;
+    );
+    let u = sqlx::query_as::<_, crate::db::UserRow>(&sql)
+        .bind(user.id)
+        .bind(req.nickname.as_deref())
+        .bind(req.avatar.as_deref())
+        .bind(req.default_bill_visible)
+        .bind(birthday)
+        .bind(req.gender)
+        .bind(req.female_role)
+        .bind(req.work_start_year)
+        .fetch_one(&state.pool)
+        .await?;
     Ok(ok(user_vo(&u)))
 }
 

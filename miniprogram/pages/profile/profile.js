@@ -1,7 +1,7 @@
 function decorateUser(user) {
   const u = user || {}
   const name = u.nickname || '旅行者'
-  const life = u.work_life || null
+  const life = u.work_life || u.workLife || null
   const bits = []
   if (life && life.ready) {
     if (life.age) bits.push(`${life.age}岁`)

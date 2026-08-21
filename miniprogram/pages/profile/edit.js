@@ -1,6 +1,6 @@
 const { api } = require('../../utils/api')
 
-const GENDER_RANGE = ['男', '女']
+const GENDER_RANGE = ['请选择', '男', '女']
 const ROLE_RANGE = ['女职工', '女干部']
 
 function todayStr() {
@@ -22,7 +22,8 @@ function decorateUser(user) {
 
 function birthdayText(birthday) {
   if (!birthday) return ''
-  const [y, m, d] = birthday.split('-')
+  const [y, m, d] = String(birthday).split('-')
+  if (!y || !m || !d) return ''
   const now = new Date()
   let age = now.getFullYear() - Number(y)
   const md = `${now.getMonth() + 1}`.padStart(2, '0') + '-' + `${now.getDate()}`.padStart(2, '0')
@@ -36,6 +37,7 @@ Page({
     nickname: '',
     initial: '旅',
     birthday: '',
+    birthdayValue: '1990-01-01',
     birthdayText: '',
     gender: 0,
     genderIndex: 0,
@@ -58,10 +60,11 @@ Page({
     const gender = Number(u.gender) || 0
     const femaleRole = Number(u.female_role) || 0
     const workStartYear = Number(u.work_start_year) || 0
+    const birthday = u.birthday || ''
     this._origin = {
       avatar: u.avatar || '',
       nickname: u.nickname,
-      birthday: u.birthday || '',
+      birthday,
       gender,
       femaleRole,
       workStartYear,
@@ -70,10 +73,11 @@ Page({
       avatar: this._origin.avatar,
       nickname: this._origin.nickname,
       initial: u.initial,
-      birthday: this._origin.birthday,
-      birthdayText: birthdayText(this._origin.birthday),
+      birthday,
+      birthdayValue: birthday || '1990-01-01',
+      birthdayText: birthdayText(birthday),
       gender,
-      genderIndex: gender === 2 ? 1 : 0,
+      genderIndex: gender === 1 ? 1 : gender === 2 ? 2 : 0,
       genderLabel: gender === 1 ? '男' : gender === 2 ? '女' : '',
       femaleRole,
       roleLabel: ROLE_RANGE[femaleRole] || ROLE_RANGE[0],
@@ -82,15 +86,26 @@ Page({
       dirty: false,
     })
   },
+  snapshot() {
+    return {
+      avatar: this.data.avatar || '',
+      nickname: (this.data.nickname || '').trim(),
+      birthday: this.data.birthday || '',
+      gender: Number(this.data.gender) || 0,
+      femaleRole: Number(this.data.femaleRole) || 0,
+      workStartYear: Number(this.data.workStartYear) || 0,
+    }
+  },
   markDirty() {
     const o = this._origin
+    const n = this.snapshot()
     const dirty =
-      (this.data.avatar || '') !== (o.avatar || '') ||
-      (this.data.nickname || '').trim() !== (o.nickname || '') ||
-      (this.data.birthday || '') !== (o.birthday || '') ||
-      Number(this.data.gender) !== Number(o.gender) ||
-      Number(this.data.femaleRole) !== Number(o.femaleRole) ||
-      Number(this.data.workStartYear) !== Number(o.workStartYear)
+      n.avatar !== (o.avatar || '') ||
+      n.nickname !== (o.nickname || '') ||
+      n.birthday !== (o.birthday || '') ||
+      n.gender !== Number(o.gender) ||
+      n.femaleRole !== Number(o.femaleRole) ||
+      n.workStartYear !== Number(o.workStartYear)
     if (dirty !== this.data.dirty) this.setData({ dirty })
   },
   onChooseAvatar(e) {
@@ -105,27 +120,31 @@ Page({
     this.setData({ nickname: e.detail.value || '' }, () => this.markDirty())
   },
   onBirthday(e) {
-    const birthday = e.detail.value || ''
-    this.setData({ birthday, birthdayText: birthdayText(birthday) }, () => this.markDirty())
+    const birthday = (e.detail && e.detail.value) || ''
+    this.setData({
+      birthday,
+      birthdayValue: birthday || '1990-01-01',
+      birthdayText: birthdayText(birthday),
+    }, () => this.markDirty())
   },
   onGender(e) {
-    const genderIndex = Number(e.detail.value)
-    const gender = genderIndex === 1 ? 2 : 1
+    const genderIndex = Number(e.detail && e.detail.value)
+    const gender = genderIndex === 1 ? 1 : genderIndex === 2 ? 2 : 0
     this.setData({
       genderIndex,
       gender,
-      genderLabel: GENDER_RANGE[genderIndex],
+      genderLabel: gender === 1 ? '男' : gender === 2 ? '女' : '',
     }, () => this.markDirty())
   },
   onRole(e) {
-    const femaleRole = Number(e.detail.value) || 0
+    const femaleRole = Number(e.detail && e.detail.value) || 0
     this.setData({
       femaleRole,
       roleLabel: ROLE_RANGE[femaleRole],
     }, () => this.markDirty())
   },
   onWorkYear(e) {
-    const raw = e.detail.value || ''
+    const raw = (e.detail && e.detail.value) || ''
     const workStartYear = Number(String(raw).slice(0, 4)) || 0
     this.setData({
       workStartYear,
@@ -143,25 +162,23 @@ Page({
       wx.showToast({ title: '昵称过长', icon: 'none' })
       return
     }
-    const o = this._origin
-    const payload = {}
-    if (nickname !== o.nickname) payload.nickname = nickname
-    if ((this.data.avatar || '') !== (o.avatar || '')) payload.avatar = this.data.avatar
-    if ((this.data.birthday || '') !== (o.birthday || '')) payload.birthday = this.data.birthday
-    if (Number(this.data.gender) !== Number(o.gender)) payload.gender = Number(this.data.gender)
-    if (Number(this.data.femaleRole) !== Number(o.femaleRole)) payload.female_role = Number(this.data.femaleRole)
-    if (Number(this.data.workStartYear) !== Number(o.workStartYear) && this.data.workStartYear) {
-      payload.work_start_year = Number(this.data.workStartYear)
-    }
-    if (!Object.keys(payload).length) {
-      this.setData({ dirty: false })
-      return
-    }
+    const payload = { nickname }
+    if (this.data.avatar) payload.avatar = this.data.avatar
+    if (this.data.birthday) payload.birthday = this.data.birthday
+    if (this.data.gender === 1 || this.data.gender === 2) payload.gender = this.data.gender
+    payload.female_role = Number(this.data.femaleRole) || 0
+    if (this.data.workStartYear) payload.work_start_year = Number(this.data.workStartYear)
     this.setData({ saving: true })
     wx.showLoading({ title: '保存中' })
     try {
       const user = await api.updateUser(payload)
-      getApp().setUser(user)
+      const prev = getApp().globalData.user || {}
+      getApp().setUser({
+        ...prev,
+        ...(user || {}),
+        ...payload,
+        work_life: (user && (user.work_life || user.workLife)) || null,
+      })
       this.syncFromStore()
       wx.showToast({ title: '已保存', icon: 'success' })
       setTimeout(() => wx.navigateBack(), 400)
