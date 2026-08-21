@@ -1,10 +1,14 @@
+# 统一基础镜像
+x-base-image: &base-image
+  BASE_IMAGE: ${BASE_IMAGE:-crpi-jya41iij3cykq66t.cn-chengdu.personal.cr.aliyuncs.com/jiangker_love/debian:stable-20240904-slim-shanghai}
+
 services:
   api:
     build:
       context: ./server
       dockerfile: Dockerfile
       args:
-        RUST_IMAGE: ${RUST_IMAGE:-crpi-jya41iij3cykq66t.cn-chengdu.personal.cr.aliyuncs.com/jiangker_love/rust:1-bookworm}
+        <<: *base-image
     image: travel-api:latest
     container_name: travel-api
     restart: unless-stopped
@@ -28,10 +32,14 @@ services:
       start_period: 25s
       retries: 5
 
-  # 唯一对外入口：路径分流后转到 api / 后续 admin
-  # 外层 Nginx 只需把 travel.jiangker.cn 端口转发到本机 PORT
+  # 唯一对外入口：基于同一 debian 镜像安装 nginx，做路径分流
   gateway:
-    image: ${NGINX_IMAGE:-crpi-jya41iij3cykq66t.cn-chengdu.personal.cr.aliyuncs.com/jiangker_love/nginx:1.27-alpine}
+    build:
+      context: ./deploy/nginx
+      dockerfile: Dockerfile
+      args:
+        <<: *base-image
+    image: travel-gateway:latest
     container_name: travel-gateway
     restart: unless-stopped
     depends_on:
@@ -39,8 +47,6 @@ services:
         condition: service_healthy
     ports:
       - "${PORT:-8080}:80"
-    volumes:
-      - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
 
   # 后续管理端（同域 /admin）：仅容器内网，不单独对外开端口
   # admin:

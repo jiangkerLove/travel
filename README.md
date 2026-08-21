@@ -26,7 +26,7 @@ cp .env.example .env
 
 默认**不**内置数据库；API 只读 `DATABASE_URL` 连接你已有的 PostgreSQL。
 
-基础镜像默认走个人阿里云仓库（与 debian 同前缀）：`rust` / `nginx`；可用 `.env` 的 `RUST_IMAGE` / `NGINX_IMAGE` 覆盖。构建前需已 `docker login` 该仓库，并确保仓库中有对应镜像 tag。
+`api` 与 `gateway` 均基于同一基础镜像构建（默认 `.../jiangker_love/debian:stable-20240904-slim-shanghai`）。构建前需已 `docker login` 该仓库。可用 `.env` 的 `BASE_IMAGE` 覆盖。
 
 ### 2. 启动
 
