@@ -1,9 +1,11 @@
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 
+use chrono::{Datelike, NaiveDate};
+
 use crate::{
     auth::make_token,
-    db::find_user,
+    db::{find_user, USER_COLS},
     error::{ok, ApiOk, AppError},
     state::{AppState, AuthUser},
 };
@@ -29,6 +31,11 @@ pub struct UserVo {
     pub nickname: String,
     pub avatar: Option<String>,
     pub default_bill_visible: bool,
+    pub birthday: Option<String>,
+    pub gender: i16,
+    pub female_role: i16,
+    pub work_start_year: Option<i32>,
+    pub work_life: Option<crate::worklife::WorkLifeVo>,
 }
 
 fn user_vo(u: &crate::db::UserRow) -> UserVo {
@@ -38,6 +45,16 @@ fn user_vo(u: &crate::db::UserRow) -> UserVo {
         nickname: u.nickname.clone(),
         avatar: u.avatar.clone(),
         default_bill_visible: u.default_bill_visible,
+        birthday: u.birthday.map(|d| d.format("%Y-%m-%d").to_string()),
+        gender: u.gender,
+        female_role: u.female_role,
+        work_start_year: u.work_start_year,
+        work_life: crate::worklife::build_work_life(
+            u.birthday,
+            u.gender,
+            u.female_role,
+            u.work_start_year,
+        ),
     }
 }
 
@@ -50,6 +67,10 @@ pub struct UpdateUserReq {
     pub nickname: Option<String>,
     pub avatar: Option<String>,
     pub default_bill_visible: Option<bool>,
+    pub birthday: Option<String>,
+    pub gender: Option<i16>,
+    pub female_role: Option<i16>,
+    pub work_start_year: Option<i32>,
 }
 
 #[derive(Deserialize)]
@@ -71,24 +92,24 @@ pub async fn login(
         .unwrap_or_else(|| "旅行者".into());
     let avatar = req.avatar.clone();
 
-    let existing = sqlx::query_as::<_, crate::db::UserRow>(
-        r#"SELECT id, open_id, nickname, avatar, default_bill_visible FROM app_user WHERE open_id = $1"#,
-    )
+    let existing = sqlx::query_as::<_, crate::db::UserRow>(&format!(
+        "SELECT {USER_COLS} FROM app_user WHERE open_id = $1"
+    ))
     .bind(&open_id)
     .fetch_optional(&state.pool)
     .await?;
 
     let user = if let Some(u) = existing {
         if req.nickname.is_some() || req.avatar.is_some() {
-            sqlx::query_as::<_, crate::db::UserRow>(
+            sqlx::query_as::<_, crate::db::UserRow>(&format!(
                 r#"
                 UPDATE app_user
                 SET nickname = COALESCE($2, nickname),
                     avatar = COALESCE($3, avatar)
                 WHERE id = $1
-                RETURNING id, open_id, nickname, avatar, default_bill_visible
-                "#,
-            )
+                RETURNING {USER_COLS}
+                "#
+            ))
             .bind(u.id)
             .bind(req.nickname.as_deref())
             .bind(req.avatar.as_deref())
@@ -98,13 +119,13 @@ pub async fn login(
             u
         }
     } else {
-        sqlx::query_as::<_, crate::db::UserRow>(
+        sqlx::query_as::<_, crate::db::UserRow>(&format!(
             r#"
             INSERT INTO app_user (open_id, nickname, avatar)
             VALUES ($1, $2, $3)
-            RETURNING id, open_id, nickname, avatar, default_bill_visible
-            "#,
-        )
+            RETURNING {USER_COLS}
+            "#
+        ))
         .bind(&open_id)
         .bind(&nickname)
         .bind(&avatar)
@@ -200,21 +221,59 @@ pub async fn update(
             return Err(AppError::BadRequest("昵称不合法".into()));
         }
     }
-    let u = sqlx::query_as::<_, crate::db::UserRow>(
+    let birthday = parse_birthday(req.birthday.as_deref())?;
+    if let Some(g) = req.gender {
+        if g < 0 || g > 2 {
+            return Err(AppError::BadRequest("性别不合法".into()));
+        }
+    }
+    if let Some(r) = req.female_role {
+        if r < 0 || r > 1 {
+            return Err(AppError::BadRequest("岗位类型不合法".into()));
+        }
+    }
+    let this_year = chrono::Local::now().year();
+    if let Some(y) = req.work_start_year {
+        if y < 1960 || y > this_year {
+            return Err(AppError::BadRequest("参加工作年份不合法".into()));
+        }
+    }
+    let u = sqlx::query_as::<_, crate::db::UserRow>(&format!(
         r#"
         UPDATE app_user
         SET nickname = COALESCE($2, nickname),
             avatar = COALESCE($3, avatar),
-            default_bill_visible = COALESCE($4, default_bill_visible)
+            default_bill_visible = COALESCE($4, default_bill_visible),
+            birthday = COALESCE($5, birthday),
+            gender = COALESCE($6, gender),
+            female_role = COALESCE($7, female_role),
+            work_start_year = COALESCE($8, work_start_year)
         WHERE id = $1
-        RETURNING id, open_id, nickname, avatar, default_bill_visible
-        "#,
-    )
+        RETURNING {USER_COLS}
+        "#
+    ))
     .bind(user.id)
     .bind(req.nickname.as_deref())
     .bind(req.avatar.as_deref())
     .bind(req.default_bill_visible)
+    .bind(birthday)
+    .bind(req.gender)
+    .bind(req.female_role)
+    .bind(req.work_start_year)
     .fetch_one(&state.pool)
     .await?;
     Ok(ok(user_vo(&u)))
+}
+
+fn parse_birthday(raw: Option<&str>) -> Result<Option<NaiveDate>, AppError> {
+    let Some(s) = raw.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Ok(None);
+    };
+    let date = NaiveDate::parse_from_str(s, "%Y-%m-%d")
+        .map_err(|_| AppError::BadRequest("出生日期不合法".into()))?;
+    let today = chrono::Local::now().date_naive();
+    if date.year() < 1920 || date > today {
+        return Err(AppError::BadRequest("出生日期不合法".into()));
+    }
+    Ok(Some(date))
 }

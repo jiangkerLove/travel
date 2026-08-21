@@ -4,8 +4,42 @@
     <view wx:else class="avatar fallback">{{initial}}</view>
     <view class="user-meta">
       <view class="nick">{{user.nickname}}</view>
+      <view class="sub" wx:if="{{sub}}">{{sub}}</view>
+      <view class="sub" wx:else>点这里填写生日和性别</view>
     </view>
     <view class="arrow">›</view>
+  </view>
+
+  <view class="life-card" wx:if="{{life.ready}}">
+    <view class="life-head">工作余生</view>
+    <view class="life-grid">
+      <view class="life-item" wx:if="{{life.holiday}}">
+        <view class="life-k">下次假期</view>
+        <view class="life-v">{{life.holiday.name}}</view>
+        <view class="life-s">{{life.holiday.startText}} · {{life.holiday.hint}}</view>
+      </view>
+      <view class="life-item">
+        <view class="life-k">退休年龄</view>
+        <view class="life-v">{{life.retireAgeText}}</view>
+        <view class="life-s">{{life.retired ? '已经退休' : life.retireDateText}}</view>
+      </view>
+      <view class="life-item">
+        <view class="life-k">还能放假</view>
+        <view class="life-v">{{life.restText}}</view>
+        <view class="life-s">{{life.restHint}}</view>
+      </view>
+      <view class="life-item">
+        <view class="life-k">还要上班</view>
+        <view class="life-v">{{life.workText}}</view>
+        <view class="life-s">{{life.workHint}}</view>
+      </view>
+    </view>
+    <view class="life-rows" wx:if="{{!life.retired && life.extras.length}}">
+      <view class="life-row" wx:for="{{life.extras}}" wx:key="k">
+        <text class="life-row-k">{{item.k}}</text>
+        <text class="life-row-v">{{item.v}}</text>
+      </view>
+    </view>
   </view>
 
   <view class="menu">

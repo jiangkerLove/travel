@@ -1,3 +1,5 @@
+const { api } = require('../../utils/api')
+
 function prettyDate(s) {
   if (!s) return ''
   const p = String(s).split('-')
@@ -9,14 +11,13 @@ function decorate(list) {
   return (list || []).map((t) => ({
     ...t,
     rangeText: `${prettyDate(t.start_date)} – ${prettyDate(t.end_date)}`,
+    countdown: t.countdown || '',
     initial: (t.destination || t.travel_name || '途').slice(0, 1),
     // 以后端为准（示例/归档已强制只读）
     can_edit: !!t.can_edit,
     can_bill: !!t.can_bill,
   }))
 }
-
-const { api } = require('../../utils/api')
 
 Page({
   data: { list: [], loading: true },

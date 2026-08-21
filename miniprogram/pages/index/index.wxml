@@ -35,6 +35,7 @@
           </view>
           <view class="trip-place">{{item.destination}}</view>
           <view class="trip-date">{{item.rangeText}}</view>
+          <view class="trip-count" wx:if="{{item.countdown}}">{{item.countdown}}</view>
         </view>
       </view>
       <view class="trip-meta">

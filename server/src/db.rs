@@ -5,6 +5,8 @@ use sqlx::PgPool;
 use crate::error::AppError;
 use crate::route::LatLng;
 
+pub const USER_COLS: &str = "id, open_id, nickname, avatar, default_bill_visible, birthday, gender, female_role, work_start_year";
+
 #[derive(sqlx::FromRow, Clone)]
 #[allow(dead_code)]
 pub struct UserRow {
@@ -13,6 +15,10 @@ pub struct UserRow {
     pub nickname: String,
     pub avatar: Option<String>,
     pub default_bill_visible: bool,
+    pub birthday: Option<NaiveDate>,
+    pub gender: i16,
+    pub female_role: i16,
+    pub work_start_year: Option<i32>,
 }
 
 #[derive(sqlx::FromRow, Clone)]
@@ -63,9 +69,9 @@ pub struct PlanRow {
 }
 
 pub async fn find_user(pool: &PgPool, id: i64) -> Result<UserRow, AppError> {
-    sqlx::query_as::<_, UserRow>(
-        r#"SELECT id, open_id, nickname, avatar, default_bill_visible FROM app_user WHERE id = $1"#,
-    )
+    sqlx::query_as::<_, UserRow>(&format!(
+        "SELECT {USER_COLS} FROM app_user WHERE id = $1"
+    ))
     .bind(id)
     .fetch_optional(pool)
     .await?

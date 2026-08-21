@@ -38,7 +38,9 @@ Page({
     }
   },
   onMarker(e) {
-    const p = this.data.points.find((i) => i.id === e.detail.markerId)
+    const markerId = e.detail.markerId
+    if (Number(markerId) >= 900000000) return
+    const p = this.data.points.find((i) => i.id === markerId)
     if (p) openMap(p)
   },
   openPlace(e) {

@@ -51,26 +51,34 @@ function trafficLabel(type) {
   return (TRAFFIC_TYPES.find((i) => i.value === type) || {}).label || type || ''
 }
 
-function formatLegHint(distanceM, durationS) {
+function formatDistance(distanceM) {
   const m = Number(distanceM) || 0
+  if (m <= 0) return ''
+  return m >= 1000 ? `${(m / 1000).toFixed(m >= 10000 ? 0 : 1)}km` : `${Math.round(m)}m`
+}
+
+function formatDuration(durationS) {
   const s = Number(durationS) || 0
-  if (m <= 0 && s <= 0) return ''
-  let dist = ''
-  if (m > 0) {
-    dist = m >= 1000 ? `${(m / 1000).toFixed(m >= 10000 ? 0 : 1)}km` : `${Math.round(m)}m`
-  }
-  let time = ''
-  if (s > 0) {
-    if (s < 90) time = '约1分钟'
-    else if (s < 3600) time = `约${Math.round(s / 60)}分钟`
-    else {
-      const h = Math.floor(s / 3600)
-      const min = Math.round((s % 3600) / 60)
-      time = min ? `约${h}小时${min}分` : `约${h}小时`
-    }
-  }
+  if (s <= 0) return ''
+  if (s < 90) return '约1分钟'
+  if (s < 3600) return `约${Math.round(s / 60)}分钟`
+  const h = Math.floor(s / 3600)
+  const min = Math.round((s % 3600) / 60)
+  return min ? `约${h}小时${min}分` : `约${h}小时`
+}
+
+function formatLegHint(distanceM, durationS) {
+  const dist = formatDistance(distanceM)
+  const time = formatDuration(durationS)
   if (dist && time) return `${dist} · ${time}`
   return dist || time
+}
+
+/** 路段文案：交通方式 · 距离 · 用时（有什么显示什么） */
+function formatLegLabel(traffic, distanceM, durationS) {
+  return [trafficLabel(traffic), formatDistance(distanceM), formatDuration(durationS)]
+    .filter(Boolean)
+    .join(' · ')
 }
 
 function legDurationSeconds(p, line) {
@@ -200,43 +208,124 @@ function toMarkers(points, opts) {
     }
   })
 
-  // 路段用时标在路线中段，不占列表
-  const showLegs = !(opts && opts.hideLegs)
-  const legMarkers = showLegs ? toLegTimeMarkers(opts && opts.lines) : []
+  // 路段时间改写在列表卡片上，地图默认不叠标签
+  const showLegs = !!(opts && opts.showLegs)
+  const legMarkers = showLegs ? toLegTimeMarkers(opts && opts.lines, points) : []
   return placeMarkers.concat(legMarkers)
 }
 
+function lineMidpoint(pts) {
+  if (!pts || pts.length < 2) return null
+  if (pts.length === 2) {
+    return {
+      latitude: (Number(pts[0].latitude) + Number(pts[1].latitude)) / 2,
+      longitude: (Number(pts[0].longitude) + Number(pts[1].longitude)) / 2,
+    }
+  }
+  const spans = []
+  let total = 0
+  for (let i = 1; i < pts.length; i++) {
+    const d = Math.hypot(
+      Number(pts[i].latitude) - Number(pts[i - 1].latitude),
+      Number(pts[i].longitude) - Number(pts[i - 1].longitude),
+    )
+    spans.push(d)
+    total += d
+  }
+  if (total <= 0) {
+    const mid = pts[Math.floor(pts.length / 2)]
+    return { latitude: Number(mid.latitude), longitude: Number(mid.longitude) }
+  }
+  let acc = 0
+  const half = total / 2
+  for (let i = 1; i < pts.length; i++) {
+    const d = spans[i - 1]
+    if (acc + d >= half) {
+      const t = d ? (half - acc) / d : 0
+      return {
+        latitude: Number(pts[i - 1].latitude) + (Number(pts[i].latitude) - Number(pts[i - 1].latitude)) * t,
+        longitude: Number(pts[i - 1].longitude) + (Number(pts[i].longitude) - Number(pts[i - 1].longitude)) * t,
+      }
+    }
+    acc += d
+  }
+  const last = pts[pts.length - 1]
+  return { latitude: Number(last.latitude), longitude: Number(last.longitude) }
+}
+
+function segmentDuration(from, to, line) {
+  if (to && Number(to.traffic_duration) > 0) return Number(to.traffic_duration) * 60
+  if (line && Number(line.duration_s) > 0) return Number(line.duration_s)
+  if (from && Number(from.next_duration_s) > 0) return Number(from.next_duration_s)
+  return 0
+}
+
 /** 在路段中点标注交通方式 + 路程时间 */
-function toLegTimeMarkers(lines) {
-  return (lines || [])
+function toLegTimeMarkers(lines, points) {
+  const byId = {}
+  ;(points || []).forEach((p) => {
+    byId[p.id] = p
+  })
+  let segs = lines || []
+  if (!segs.length && (points || []).length >= 2) {
+    segs = []
+    for (let i = 0; i < points.length - 1; i++) {
+      const a = points[i]
+      const b = points[i + 1]
+      if (!a.latitude || !b.latitude) continue
+      segs.push({
+        from_id: a.id,
+        to_id: b.id,
+        traffic_type: b.traffic_type,
+        distance_m: a.next_distance_m,
+        duration_s: 0,
+        points: [
+          { latitude: a.latitude, longitude: a.longitude },
+          { latitude: b.latitude, longitude: b.longitude },
+        ],
+      })
+    }
+  }
+  return segs
     .map((l, idx) => {
-      const pts = (l.points || []).filter((p) => p.latitude && p.longitude)
+      const from = byId[l.from_id]
+      const to = byId[l.to_id]
+      let pts = (l.points || []).filter((p) => p.latitude && p.longitude)
+      if (pts.length < 2 && from && to && from.latitude && to.latitude) {
+        pts = [
+          { latitude: from.latitude, longitude: from.longitude },
+          { latitude: to.latitude, longitude: to.longitude },
+        ]
+      }
       if (pts.length < 2) return null
-      const mode = trafficLabel(l.traffic_type)
-      const hint = formatLegHint(l.distance_m, l.duration_s)
-      const content = [mode, hint].filter(Boolean).join(' · ')
+      const traffic = l.traffic_type || (to && to.traffic_type)
+      const duration = segmentDuration(from, to, l)
+      const distance = l.distance_m || (from && from.next_distance_m)
+      const content = formatLegLabel(traffic, distance, duration)
       if (!content) return null
-      const mid = pts[Math.floor(pts.length / 2)]
+      const mid = lineMidpoint(pts)
+      if (!mid) return null
       return {
         id: 900000000 + idx,
-        latitude: Number(mid.latitude),
-        longitude: Number(mid.longitude),
+        latitude: mid.latitude,
+        longitude: mid.longitude,
+        iconPath: 'assets/map-leg.png',
         width: 12,
         height: 12,
-        alpha: 0.01,
         anchor: { x: 0.5, y: 0.5 },
-        zIndex: 50 + idx,
-        callout: {
+        zIndex: 80 + idx,
+        label: {
           content,
-          display: 'ALWAYS',
-          padding: 5,
-          borderRadius: 999,
-          fontSize: 10,
-          color: '#5d8a76',
+          color: '#3d5c4e',
+          fontSize: 11,
           bgColor: '#ffffff',
+          borderRadius: 8,
           borderWidth: 1,
           borderColor: '#cfe0d6',
+          padding: 5,
           textAlign: 'center',
+          anchorX: 0,
+          anchorY: -18,
         },
       }
     })
@@ -315,7 +404,9 @@ module.exports = {
   pointMeta,
   costLabel,
   trafficLabel,
+  formatDuration,
   formatLegHint,
+  formatLegLabel,
   legDurationSeconds,
   withLegHints,
   linesToPolyline,

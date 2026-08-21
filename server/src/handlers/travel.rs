@@ -42,6 +42,7 @@ pub struct TravelVo {
     pub can_edit: bool,
     pub can_bill: bool,
     pub day_count: i32,
+    pub countdown: String,
 }
 
 #[derive(Deserialize)]
@@ -122,6 +123,11 @@ fn to_vo(t: &TravelRow, member_count: i64, role: i16, can_edit: bool, can_bill: 
         can_edit: !read_only && (role == 1 || can_edit),
         can_bill: !read_only && (role == 1 || can_bill),
         day_count: day_count(t.start_date, t.end_date),
+        countdown: crate::worklife::trip_countdown(
+            t.start_date,
+            t.end_date,
+            chrono::Local::now().date_naive(),
+        ),
     }
 }
 

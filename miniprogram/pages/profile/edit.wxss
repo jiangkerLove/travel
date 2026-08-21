@@ -84,6 +84,33 @@ page {
   background: #eef3ef;
 }
 
+.later {
+  margin-top: 24rpx;
+}
+
+.later picker {
+  display: block;
+}
+
+.val {
+  font-size: 30rpx;
+  color: #2f3d36;
+}
+
+.chev {
+  color: #c5d0c9;
+  font-size: 36rpx;
+  line-height: 1;
+  margin-left: 8rpx;
+}
+
+.hint {
+  margin: 20rpx 8rpx 0;
+  font-size: 22rpx;
+  color: #9aa89f;
+  line-height: 1.6;
+}
+
 .save {
   margin-top: 48rpx;
   height: 92rpx;

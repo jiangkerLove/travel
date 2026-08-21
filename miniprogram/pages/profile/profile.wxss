@@ -55,11 +55,96 @@ page {
   white-space: nowrap;
 }
 
+.sub {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: #8a9a90;
+}
+
 .arrow {
   color: #c5d0c9;
   font-size: 40rpx;
   line-height: 1;
   margin-left: 8rpx;
+}
+
+.life-card {
+  background: #fff;
+  border-radius: 28rpx;
+  padding: 28rpx 8rpx 12rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 10rpx 28rpx rgba(80, 110, 96, 0.04);
+}
+
+.life-head {
+  padding: 0 20rpx 16rpx;
+  font-size: 24rpx;
+  color: #8a9a90;
+  letter-spacing: 4rpx;
+}
+
+.life-grid {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.life-item {
+  width: 50%;
+  box-sizing: border-box;
+  padding: 20rpx 24rpx 28rpx;
+}
+
+.life-k {
+  font-size: 22rpx;
+  color: #8a9a90;
+}
+
+.life-v {
+  margin-top: 10rpx;
+  font-size: 34rpx;
+  font-weight: 650;
+  color: #2f3d36;
+  line-height: 1.25;
+}
+
+.life-v.muted {
+  font-weight: 500;
+  color: #b4c2ba;
+}
+
+.life-s {
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  color: #9aa89f;
+  line-height: 1.4;
+}
+
+.life-rows {
+  margin: 4rpx 20rpx 16rpx;
+  padding-top: 8rpx;
+  border-top: 1rpx solid #eef3ef;
+}
+
+.life-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 16rpx 4rpx;
+}
+
+.life-row-k {
+  flex-shrink: 0;
+  font-size: 24rpx;
+  color: #8a9a90;
+}
+
+.life-row-v {
+  min-width: 0;
+  text-align: right;
+  font-size: 24rpx;
+  color: #4f6f62;
+  line-height: 1.4;
 }
 
 .menu {

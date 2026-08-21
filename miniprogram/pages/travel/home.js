@@ -11,7 +11,7 @@ const {
   fitPointsForMap,
   openMap,
   formatLegHint,
-  legDurationSeconds,
+  formatLegLabel,
 } = require('../../utils/constants')
 const { fillLineRoutes } = require('../../utils/direction')
 
@@ -42,16 +42,21 @@ function decoratePlans(plans, startHint, showRoute) {
     color: pointMeta(p.point_type).color,
     typeLabel: pointMeta(p.point_type).label,
     trafficLabel: trafficLabel(p.traffic_type),
-    legHint: showRoute ? formatLegHint(p.next_distance_m, legDurationSeconds(p)) : '',
   }))
-  if (!showRoute) {
-    return list.map((p) => ({ ...p, arriveText: '' }))
-  }
   return list.map((p, i) => {
     const prev = list[i - 1]
-    const arriveText = i === 0
-      ? [p.trafficLabel, startHint].filter(Boolean).join(' · ')
-      : [p.trafficLabel, prev && prev.legHint].filter(Boolean).join(' · ')
+    let arriveText = ''
+    if (i === 0) {
+      if (startHint) {
+        arriveText = [p.trafficLabel, showRoute ? startHint : ''].filter(Boolean).join(' · ')
+      }
+    } else {
+      const duration = Number(p.traffic_duration) > 0
+        ? Number(p.traffic_duration) * 60
+        : (showRoute ? Number(prev.next_duration_s) || 0 : 0)
+      const distance = showRoute ? (prev.next_distance_m || 0) : 0
+      arriveText = formatLegLabel(p.traffic_type, distance, duration)
+    }
     return { ...p, arriveText }
   })
 }
@@ -114,6 +119,8 @@ Page({
     mapLng: 104.06,
     markers: [],
     polyline: [],
+    mapExpanded: false,
+    mapHeight: 210,
     dragIndex: -1,
     canEdit: false,
     canBill: false,
@@ -140,6 +147,7 @@ Page({
       routesReady: mode !== 'edit',
       mapScope: mode === 'edit' ? 'day' : 'all',
       dayIndex: mode === 'edit' ? 0 : -1,
+      mapHeight: this.collapsedMapHeight(),
       // 先用列表带来的名字占位，防止整页空白再闪
       trip: id
         ? {
@@ -175,7 +183,12 @@ Page({
   },
   setTab(e) {
     const tab = e.currentTarget.dataset.v
-    this.setData({ tab })
+    const patch = { tab }
+    if (tab !== 'plan' && this.data.mapExpanded) {
+      patch.mapExpanded = false
+      this.animateMapHeight(this.collapsedMapHeight(), 420)
+    }
+    this.setData(patch)
     if (tab === 'plan') {
       if (!this._plansLoaded) this.loadPlans()
       else this.renderMap({ fit: false })
@@ -335,6 +348,72 @@ Page({
       this._mapFitted = true
     }, 80)
   },
+  setMapView(markers, polyline) {
+    const poly = polyline || []
+    const nextKey = `${(markers || []).map((m) => `${m.id}:${m.latitude},${m.longitude}:${(m.callout && m.callout.content) || (m.label && m.label.content) || ''}`).join('|')}#${poly.length}`
+    if (nextKey !== this._mapDrawKey) {
+      this._mapDrawKey = nextKey
+      this.setData({ markers: markers || [], polyline: poly })
+    }
+  },
+  collapsedMapHeight() {
+    return Math.round(420 * wx.getSystemInfoSync().windowWidth / 750)
+  },
+  expandedMapHeight() {
+    const sys = wx.getSystemInfoSync()
+    const rpx = sys.windowWidth / 750
+    const hero = Math.round(56 * rpx)
+    const days = Math.round(92 * rpx)
+    const pad = Math.round(24 * rpx)
+    const bar = this.data.mode === 'edit'
+      ? Math.round(108 * rpx) + ((sys.safeAreaInsets && sys.safeAreaInsets.bottom) || 0)
+      : Math.round(12 * rpx)
+    return Math.max(280, Math.round(sys.windowHeight - hero - days - pad - bar))
+  },
+  animateMapHeight(to, duration) {
+    const from = Number(this.data.mapHeight) || this.collapsedMapHeight()
+    if (this._hTimer) {
+      clearTimeout(this._hTimer)
+      this._hTimer = null
+    }
+    if (from === to) {
+      this.setData({ mapHeight: to })
+      return
+    }
+    const t0 = Date.now()
+    const tick = () => {
+      const t = Math.min(1, (Date.now() - t0) / duration)
+      const eased = 1 - (1 - t) ** 3
+      this.setData({ mapHeight: Math.round(from + (to - from) * eased) })
+      if (t < 1) this._hTimer = setTimeout(tick, 32)
+      else this._hTimer = null
+    }
+    tick()
+  },
+  applyMapMarkers(showLegs) {
+    const cache = this._mapCache
+    if (!cache || !cache.points) return
+    const markers = toMarkers(cache.points, {
+      markStart: cache.markStart,
+      lines: cache.lines,
+      showLegs,
+    })
+    cache.markers = markers
+    this._mapDrawKey = ''
+    this.setMapView(markers, cache.polyline)
+  },
+  toggleMapFull() {
+    const mapExpanded = !this.data.mapExpanded
+    const mapHeight = mapExpanded ? this.expandedMapHeight() : this.collapsedMapHeight()
+    this.setData({ mapExpanded })
+    this.applyMapMarkers(mapExpanded)
+    this.animateMapHeight(mapHeight, 420)
+    if (this._fitDelay) clearTimeout(this._fitDelay)
+    this._fitDelay = setTimeout(() => {
+      const pts = (this._mapCache && this._mapCache.points) || []
+      if (pts.length) this.fitMap(pts)
+    }, 430)
+  },
   /** 顶部地图：当天或全程 */
   async renderMap({ fit = false } = {}) {
     const seq = ++this._mapSeq
@@ -365,24 +444,15 @@ Page({
 
     if (this._mapCache && this._mapCache.key === cacheKey) {
       if (seq !== this._mapSeq) return
-      const sameMark = this._mapCache.markers === this.data.markers
-      if (!sameMark) {
-        this.setData({
-          markers: this._mapCache.markers,
-          polyline: withLines ? this._mapCache.polyline : [],
-        })
-      }
+      this.applyMapMarkers(this.data.mapExpanded)
       if (fit) this.fitMap(this._mapCache.points)
       return
     }
 
     if (!withLines) {
-      const markers = toMarkers(localGeo, { markStart, hideLegs: true })
-      const nextKey = `${markers.map((m) => `${m.id}:${m.latitude},${m.longitude}`).join('|')}#0`
-      if (nextKey !== this._mapDrawKey) {
-        this._mapDrawKey = nextKey
-        this.setData({ markers, polyline: [] })
-      }
+      const markers = toMarkers(localGeo, { markStart, showLegs: this.data.mapExpanded })
+      this._mapCache = { key: cacheKey, markers, polyline: [], points: localGeo, lines: [], markStart }
+      this.setMapView(markers, [])
       if (fit) this.fitMap(localGeo)
       return
     }
@@ -417,23 +487,17 @@ Page({
         const filled = fillLineRoutes(data.lines || [], points)
         lines = filled.lines
       }
-      const markers = toMarkers(points, { markStart, lines })
+      const markers = toMarkers(points, { markStart, lines, showLegs: this.data.mapExpanded })
       const polyline = linesToPolyline(lines, points)
-      this._mapCache = { key: cacheKey, markers, polyline, points }
+      this._mapCache = { key: cacheKey, markers, polyline, points, lines, markStart }
       if (seq !== this._mapSeq) return
-      // 内容没变就别再 setData，否则原生 map 会反复重绘闪烁
-      const nextKey = `${markers.map((m) => `${m.id}:${m.latitude},${m.longitude}:${(m.callout && m.callout.content) || ''}`).join('|')}#${polyline.length}`
-      if (nextKey !== this._mapDrawKey) {
-        this._mapDrawKey = nextKey
-        this.setData({ markers, polyline })
-      }
+      this.setMapView(markers, polyline)
       if (fit) this.fitMap(points)
     } catch (e) {
       if (seq !== this._mapSeq) return
-      this.setData({
-        markers: toMarkers(localGeo, { markStart, hideLegs: true }),
-        polyline: [],
-      })
+      const markers = toMarkers(localGeo, { markStart, showLegs: this.data.mapExpanded })
+      this._mapCache = { key: cacheKey, markers, polyline: [], points: localGeo, lines: [], markStart }
+      this.setMapView(markers, [])
       if (fit) this.fitMap(localGeo)
     }
   },
@@ -673,8 +737,10 @@ Page({
     }
   },
   onMarker(e) {
+    const markerId = e.detail.markerId
+    if (Number(markerId) >= 900000000) return
     const all = (this.data.days || []).flatMap((d) => d.plans || [])
-    const p = all.find((i) => i.id === e.detail.markerId)
+    const p = all.find((i) => i.id === markerId)
     if (!p) return
     if (this.data.mode === 'edit' && this.data.canEdit) {
       this.openPlanEdit({ id: p.id, plan: p })
@@ -1037,6 +1103,36 @@ Page({
   async toggleLock() {
     await api.travelLock({ travel_id: this.data.id, is_lock: !this.data.trip.is_lock })
     this.refresh()
+  },
+  onTravelMgmt() {
+    const trip = this.data.trip || {}
+    if (trip.is_sample || Number(trip.status) === 2) return
+    const items = []
+    const actions = []
+    if (this.data.canEdit) {
+      items.push('排行程')
+      actions.push('plan')
+    }
+    if (trip.role === 1) {
+      items.push('修改日期')
+      actions.push('dates')
+    }
+    if (this.data.isCreator) {
+      items.push('归档行程')
+      actions.push('archive')
+    }
+    if (!items.length) return
+    wx.showActionSheet({
+      itemList: items,
+      success: (r) => {
+        const action = actions[r.tapIndex]
+        setTimeout(() => {
+          if (action === 'plan') this.enterEdit()
+          else if (action === 'dates') this.goEditTravel()
+          else if (action === 'archive') this.archive()
+        }, 50)
+      },
+    })
   },
   goEditTravel() {
     if (this.data.trip.is_lock) {
