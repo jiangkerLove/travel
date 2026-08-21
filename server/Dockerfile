@@ -1,91 +1,77 @@
-# 统一基础镜像（个人阿里云）
+# 旅途计划 API · 对齐 sesame-rise：国内源 Debian 编译，运行时不再 apt-get
 ARG BASE_IMAGE=crpi-jya41iij3cykq66t.cn-chengdu.personal.cr.aliyuncs.com/jiangker_love/debian:stable-20240904-slim-shanghai
+# 腾讯云机器可改为 http://mirrors.tencentyun.com
+ARG APT_MIRROR=http://mirrors.aliyun.com
 
-# ---- build ----
 FROM ${BASE_IMAGE} AS builder
-WORKDIR /app
+ARG APT_MIRROR
 
-# 先换国内 apt 源，再装依赖（避免直连 deb.debian.org 极慢）
 RUN set -eux; \
-  if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
-    sed -i \
-      -e 's|https\?://deb.debian.org|https://mirrors.aliyun.com|g' \
-      -e 's|https\?://security.debian.org|https://mirrors.aliyun.com|g' \
-      /etc/apt/sources.list.d/debian.sources; \
-  fi; \
-  if [ -f /etc/apt/sources.list ]; then \
-    sed -i \
-      -e 's|deb.debian.org|mirrors.aliyun.com|g' \
-      -e 's|security.debian.org|mirrors.aliyun.com|g' \
-      /etc/apt/sources.list; \
-  fi; \
+  . /etc/os-release; \
+  rm -f /etc/apt/sources.list.d/*.sources; \
+  printf '%s\n' \
+    "deb ${APT_MIRROR}/debian ${VERSION_CODENAME} main contrib non-free non-free-firmware" \
+    "deb ${APT_MIRROR}/debian-security ${VERSION_CODENAME}-security main contrib non-free non-free-firmware" \
+    "deb ${APT_MIRROR}/debian ${VERSION_CODENAME}-updates main contrib non-free non-free-firmware" \
+    > /etc/apt/sources.list; \
+  printf 'Acquire::Retries "5";\n' > /etc/apt/apt.conf.d/80retries; \
   apt-get update; \
   apt-get install -y --no-install-recommends \
-    ca-certificates curl build-essential pkg-config libssl-dev; \
+    ca-certificates curl pkg-config gcc libc6-dev busybox-static; \
   rm -rf /var/lib/apt/lists/*
 
-# 安装 Rust（国内静态资源镜像）
 ENV RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
     PATH=/usr/local/cargo/bin:$PATH \
-    RUSTUP_DIST_SERVER=https://mirrors.ustc.edu.cn/rust-static \
-    RUSTUP_UPDATE_ROOT=https://mirrors.ustc.edu.cn/rust-static/rustup
+    RUSTUP_DIST_SERVER=https://rsproxy.cn \
+    RUSTUP_UPDATE_ROOT=https://rsproxy.cn/rustup
 
-RUN curl --proto '=https' --tlsv1.2 -sSf https://rsproxy.cn/rustup-init.sh | sh -s -- -y --default-toolchain stable \
-  && rustc --version
-
-RUN mkdir -p ${CARGO_HOME} \
+RUN curl --proto '=https' --tlsv1.2 -sSf https://rsproxy.cn/rustup-init.sh \
+    | sh -s -- -y --default-toolchain stable --profile minimal \
+  && mkdir -p "${CARGO_HOME}" \
   && printf '%s\n' \
     '[source.crates-io]' \
     'replace-with = "rsproxy-sparse"' \
+    '' \
+    '[source.rsproxy]' \
+    'registry = "https://rsproxy.cn/crates.io-index"' \
+    '' \
     '[source.rsproxy-sparse]' \
     'registry = "sparse+https://rsproxy.cn/index/"' \
+    '' \
     '[registries.rsproxy]' \
     'index = "https://rsproxy.cn/crates.io-index"' \
+    '' \
     '[net]' \
     'git-fetch-with-cli = true' \
-    > ${CARGO_HOME}/config.toml
+    > "${CARGO_HOME}/config.toml"
 
+WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 COPY migrations ./migrations
-RUN mkdir src && echo "fn main() {}" > src/main.rs \
-  && cargo build --release \
-  && rm -rf src
-
 COPY src ./src
-RUN touch src/main.rs && cargo build --release \
+RUN cargo build --release \
   && strip target/release/server
 
-# ---- runtime ----
 FROM ${BASE_IMAGE} AS runtime
-RUN set -eux; \
-  if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
-    sed -i \
-      -e 's|https\?://deb.debian.org|https://mirrors.aliyun.com|g' \
-      -e 's|https\?://security.debian.org|https://mirrors.aliyun.com|g' \
-      /etc/apt/sources.list.d/debian.sources; \
-  fi; \
-  if [ -f /etc/apt/sources.list ]; then \
-    sed -i \
-      -e 's|deb.debian.org|mirrors.aliyun.com|g' \
-      -e 's|security.debian.org|mirrors.aliyun.com|g' \
-      /etc/apt/sources.list; \
-  fi; \
-  apt-get update; \
-  apt-get install -y --no-install-recommends ca-certificates libssl3 curl; \
-  rm -rf /var/lib/apt/lists/*; \
-  useradd --system --create-home --uid 10001 app
+
+# 运行阶段不再 apt-get：证书和 wget 从 builder 拷过来
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=builder /bin/busybox /usr/local/bin/busybox
+RUN ln -sf /usr/local/bin/busybox /usr/local/bin/wget \
+  && useradd -r -u 10001 -m appuser
 
 WORKDIR /app
 COPY --from=builder /app/target/release/server /usr/local/bin/travel-api
 
-USER app
+USER appuser
 ENV PORT=3000 \
     RUST_LOG=server=info,sqlx=warn,tower_http=info \
-    DEV_MODE=0
+    DEV_MODE=0 \
+    SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
 
 EXPOSE 3000
-HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
-  CMD curl -fsS "http://127.0.0.1:${PORT}/health" >/dev/null || exit 1
+HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=12 \
+  CMD wget -qO- http://127.0.0.1:3000/health || exit 1
 
 CMD ["travel-api"]

@@ -6,7 +6,7 @@
 
 - 后端：`server/`
 - 小程序：`miniprogram/`
-- 部署：根目录 `docker-compose.yml`
+- 部署：根目录 `docker-compose.yml`（风格对齐 sesame-rise，**不内置 HTTPS**）
 
 ---
 
@@ -20,13 +20,9 @@ cp .env.example .env
 
 编辑 `.env`，至少修改：
 
-- `DATABASE_URL`（复用已有 PostgreSQL，例如 `postgres://user:pass@host:5432/travel`）
+- `DATABASE_URL`：已有 Postgres；容器内用 `host.docker.internal`，不要写 `127.0.0.1`
 - `JWT_SECRET`
-- `WECHAT_APPID` / `WECHAT_SECRET`（小程序正式登录）
-
-默认**不**内置数据库；API 只读 `DATABASE_URL` 连接你已有的 PostgreSQL。
-
-`api` 与 `gateway` 均基于同一基础镜像构建（默认 `.../jiangker_love/debian:stable-20240904-slim-shanghai`）。构建前需已 `docker login` 该仓库。可用 `.env` 的 `BASE_IMAGE` 覆盖。
+- `WECHAT_APPID` / `WECHAT_SECRET`
 
 ### 2. 启动
 
@@ -34,41 +30,35 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-- 对外入口：`gateway`，只映射一个端口 `PORT`（默认 **8080**）
-- 外层 Nginx 把 `travel.jiangker.cn` 端口转发到本机该端口即可；`/api`、`/admin` 在容器内分流
-- API 只在 Docker 内网监听，不再单独对外开端口
-- 健康检查：`GET /health`
-- 数据库迁移在 API 启动时自动执行
+- 对外只映射一个端口 `PORT`（默认 **8080** → gateway HTTP）
+- 外层 Nginx 把 `travel.jiangker.cn` **端口转发**到该端口即可（HTTPS 在你外层处理）
+- `api` 基于个人阿里云 `debian:…-shanghai` 构建；运行时不再 `apt-get`（证书 / wget 从 builder 拷入）
+- `gateway` 使用现成 nginx 镜像做 `/api`、`/health`、`/admin` 分流
+- 启动时自动跑数据库迁移
 
-**同域路径（gateway 内）**
+**同域路径**
 
 | 路径 | 用途 |
 |------|------|
-| `/api/*` | 小程序 / 业务 API |
+| `/api/*` | 业务 API |
 | `/health` | 健康检查 |
-| `/admin/*` | 后续管理端（未部署时 502/503，属正常） |
-
-常用命令：
+| `/admin/*` | 后续管理端 |
 
 ```bash
 docker compose ps
 docker compose logs -f gateway api
-docker compose down          # 停服务
+docker compose down
 ```
 
 ### 3. 小程序侧
 
-1. `miniprogram/utils/config.js`：开发版走本机，体验版/正式版走 `https://travel.jiangker.cn`（请求仍是 `/api/...`）
-2. 小程序后台将 request 合法域名设为 `travel.jiangker.cn`
-3. 微信开发者工具打开 `miniprogram/`，构建 npm 后上传审核
-
-生产环境请保持 `DEV_MODE=0`（compose 默认已是 0）。
+1. 体验版 / 正式版请求 `https://travel.jiangker.cn/api/...`
+2. 小程序后台配置 request 合法域名 `travel.jiangker.cn`
+3. 构建 npm 后上传审核
 
 ---
 
 ## 本地开发
-
-后端：
 
 ```bash
 cd server
@@ -78,16 +68,12 @@ cargo run
 
 默认 API：`http://127.0.0.1:3000`
 
-小程序：
-
 ```bash
 cd miniprogram
 npm install
 ```
 
-用微信开发者工具打开 `miniprogram/`，构建 npm；真机调试时把 `baseUrl` 改成电脑局域网 IP。
-
-新用户无真实行程时会自动出现「川西小环线」已结束示例，可查看行程、账单与分账。
+用微信开发者工具打开 `miniprogram/` 并构建 npm。
 
 ---
 
