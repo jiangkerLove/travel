@@ -1,22 +1,24 @@
 services:
+  # 默认不启：生产复用已有库，只配 DATABASE_URL 即可
+  # 本地临时库：docker compose --profile local-db up -d
   db:
+    profiles: ["local-db"]
     image: postgres:16-alpine
     container_name: travel-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-travel}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-travel}
-      POSTGRES_DB: ${POSTGRES_DB:-travel}
+      POSTGRES_USER: travel
+      POSTGRES_PASSWORD: travel
+      POSTGRES_DB: travel
     volumes:
       - travel_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test: ["CMD-SHELL", "pg_isready -U travel -d travel"]
       interval: 5s
       timeout: 5s
       retries: 12
-    # 仅本机开发需要连库时打开；生产建议注释，只走容器内网
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "5432:5432"
 
   api:
     build:
@@ -25,11 +27,8 @@ services:
     image: travel-api:latest
     container_name: travel-api
     restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-travel}:${POSTGRES_PASSWORD:-travel}@db:5432/${POSTGRES_DB:-travel}
+      DATABASE_URL: ${DATABASE_URL:?请在 .env 中设置 DATABASE_URL}
       JWT_SECRET: ${JWT_SECRET:-travel-dev-secret-change-me}
       WECHAT_APPID: ${WECHAT_APPID:-}
       WECHAT_SECRET: ${WECHAT_SECRET:-}

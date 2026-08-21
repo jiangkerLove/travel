@@ -20,9 +20,11 @@ cp .env.example .env
 
 编辑 `.env`，至少修改：
 
-- `POSTGRES_PASSWORD`
+- `DATABASE_URL`（复用已有 PostgreSQL，例如 `postgres://user:pass@host:5432/travel`）
 - `JWT_SECRET`
 - `WECHAT_APPID` / `WECHAT_SECRET`（小程序正式登录）
+
+默认**不**启动内置数据库容器；API 只读 `DATABASE_URL`。
 
 ### 2. 启动
 
@@ -49,8 +51,7 @@ docker compose up -d --build
 ```bash
 docker compose ps
 docker compose logs -f gateway api
-docker compose down          # 停服务（保留数据卷）
-docker compose down -v       # 停服务并清空数据库
+docker compose down          # 停服务
 ```
 
 ### 3. 小程序侧
@@ -65,17 +66,18 @@ docker compose down -v       # 停服务并清空数据库
 
 ## 本地开发
 
-只起数据库：
+可选：起一个临时库（profile）
 
 ```bash
-docker compose up -d db
+docker compose --profile local-db up -d db
+# 此时 DATABASE_URL=postgres://travel:travel@127.0.0.1:5432/travel
 ```
 
 后端：
 
 ```bash
 cd server
-cp .env.example .env   # 按需修改
+cp .env.example .env   # 按需修改 DATABASE_URL
 cargo run
 ```
 
