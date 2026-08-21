@@ -1,7 +1,7 @@
 {
   "name": "jieban-chuxing",
   "private": true,
-  "description": "结伴出行微信小程序",
+  "description": "旅途计划微信小程序",
   "dependencies": {
     "tdesign-miniprogram": "^1.16.0"
   }

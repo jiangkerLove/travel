@@ -30,6 +30,8 @@ CREATE TABLE IF NOT EXISTS travel_member (
     role            SMALLINT NOT NULL DEFAULT 0,
     can_edit        BOOLEAN NOT NULL DEFAULT FALSE,
     can_bill        BOOLEAN NOT NULL DEFAULT FALSE,
+    -- 结算团体名（如同「我这边」）；空则按个人计
+    group_name      VARCHAR(50),
     join_time       TIMESTAMP NOT NULL DEFAULT NOW(),
     UNIQUE (travel_id, user_id)
 );

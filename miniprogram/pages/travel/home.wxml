@@ -1,11 +1,18 @@
 <view class="home" wx:if="{{trip.id}}">
   <view class="top-fixed">
     <view class="hero">
-      <view class="hero-title">{{trip.travel_name}}</view>
+      <view class="hero-title-row">
+        <view class="hero-title">{{trip.travel_name}}</view>
+        <view
+          class="hero-edit"
+          wx:if="{{mode === 'browse' && canEdit}}"
+          bind:tap="enterEdit"
+        >去编辑</view>
+      </view>
       <view class="hero-meta" wx:if="{{trip.destination}}">
         {{trip.destination}}<text wx:if="{{trip.start_date}}"> · {{trip.start_date}} – {{trip.end_date}}</text>
       </view>
-      <view class="hero-meta" wx:if="{{trip.is_sample}}">示例攻略 · 仅供查看，不可编辑</view>
+      <view class="hero-meta" wx:if="{{trip.is_sample}}">示例攻略</view>
     </view>
 
     <view class="map-wrap">
@@ -14,7 +21,7 @@
         class="day-map"
         latitude="{{mapLat}}"
         longitude="{{mapLng}}"
-        scale="10"
+        scale="12"
         markers="{{markers}}"
         polyline="{{polyline}}"
         show-location="{{false}}"
@@ -73,18 +80,14 @@
           <view class="day-sec">D{{day.day_num}} · {{day.shortDate}}</view>
           <view class="empty-mini" wx:if="{{!day.plans.length}}">这一天还空着</view>
           <view
-            class="plan-row {{p.point_type === 'via' ? 'is-via' : ''}}"
+            class="plan-row"
             wx:for="{{day.plans}}"
             wx:for-item="p"
             wx:key="id"
           >
             <view class="plan-main" bind:tap="editPlan" data-id="{{p.id}}">
               <view class="plan-name">{{p.place_name}}</view>
-              <view class="plan-sub">
-                {{p.typeLabel}}
-                <text wx:if="{{routesReady && p.arriveText}}"> · {{p.arriveText}}</text>
-              </view>
-              <view class="plan-leg" wx:if="{{routesReady && p.legHint}}">下一段 {{p.legHint}}</view>
+              <view class="plan-sub">{{p.typeLabel}}</view>
             </view>
           </view>
         </block>
@@ -96,7 +99,7 @@
         <view class="plan-row is-start" wx:if="{{currentDay.startFrom}}">
           <view class="plan-main">
             <view class="plan-name">{{currentDay.startFrom.place_name}}</view>
-            <view class="plan-sub">D{{currentDay.startFrom.day_num}} 停留 · 今天从这里出发{{currentDay.startHint && routesReady ? ' · ' + currentDay.startHint : ''}}</view>
+            <view class="plan-sub">D{{currentDay.startFrom.day_num}} 停留 · 今天从这里出发</view>
           </view>
         </view>
 
@@ -109,7 +112,7 @@
 
         <view class="plan-list" wx:else>
           <view
-            class="plan-row {{item.point_type === 'via' ? 'is-via' : ''}} {{dragIndex === index ? 'lift' : ''}} {{index === 0 && !currentDay.startFrom ? 'is-start' : ''}}"
+            class="plan-row {{dragIndex === index ? 'lift' : ''}} {{index === 0 && !currentDay.startFrom ? 'is-start' : ''}}"
             wx:for="{{currentDay.plans}}"
             wx:key="id"
           >
@@ -117,10 +120,8 @@
               <view class="plan-name">{{index === 0 && !currentDay.startFrom ? '起点 · ' : ''}}{{item.place_name}}</view>
               <view class="plan-sub">
                 {{item.typeLabel}}{{index === 0 && !currentDay.startFrom && !item.latitude ? ' · 还没标坐标' : ''}}
-                <text wx:if="{{routesReady && item.arriveText}}"> · {{item.arriveText}}</text>
               </view>
               <view class="plan-tip" wx:if="{{item.remark}}">{{item.remark}}</view>
-              <view class="plan-leg" wx:if="{{routesReady && item.legHint}}">下一段 {{item.legHint}}</view>
             </view>
             <view
               class="plan-more"
@@ -145,73 +146,138 @@
     </view>
 
     <view wx:if="{{mode === 'browse' && tab === 'bill'}}" class="body-pad">
-      <view class="stat-grid">
-        <view class="stat"><view class="stat-k">公共</view><view class="stat-v">¥{{stat.public_total || 0}}</view></view>
-        <view class="stat"><view class="stat-k">我的</view><view class="stat-v">¥{{stat.private_total || 0}}</view></view>
-        <view class="stat"><view class="stat-k">人均</view><view class="stat-v">¥{{stat.avg_public || 0}}</view></view>
+      <view class="bill-hero">
+        <view class="stat-grid two">
+          <view class="stat {{billView === 'pool' ? 'on' : ''}}" bind:tap="setBillView" data-v="pool">
+            <view class="stat-k">账单池</view>
+            <view class="stat-v">¥{{stat.public_total || 0}}</view>
+          </view>
+          <view class="stat {{billView === 'mine' ? 'on' : ''}}" bind:tap="setBillView" data-v="mine">
+            <view class="stat-k">我的花销</view>
+            <view class="stat-v">¥{{stat.private_total || 0}}</view>
+          </view>
+        </view>
+        <view class="settle-entry" wx:if="{{mapScope === 'all' && trip.status === 2}}" bind:tap="goSettle">
+          <view>
+            <view class="settle-title">智能分账</view>
+            <view class="settle-sub">已归档 · 按人或团体看该转多少</view>
+          </view>
+          <text class="settle-arrow">›</text>
+        </view>
+        <view class="settle-tip" wx:elif="{{mapScope === 'all' && !trip.is_sample}}">归档后可查看智能分账</view>
       </view>
-      <view class="place-card" wx:if="{{stat.categories && stat.categories.length}}">
+
+      <view class="cat-card" wx:if="{{billView === 'pool' && stat.categories && stat.categories.length}}">
         <view class="cat" wx:for="{{stat.categories}}" wx:key="cost_type">
           <text>{{item.label}}</text>
           <text>¥{{item.amount}}</text>
         </view>
       </view>
-      <view class="soft-btn" bind:tap="goSettle">查看分账</view>
+
+      <view class="list-head">
+        <view class="list-title">{{billListTitle}}</view>
+        <view class="list-count" wx:if="{{bills.length}}">{{bills.length}} 笔</view>
+      </view>
+
       <view class="place-card bill" wx:for="{{bills}}" wx:key="id" bind:tap="editBill" data-id="{{item.id}}">
         <view class="bill-row">
           <view class="bill-main">
             <view class="place-name">{{item.bill_name}}</view>
-            <view class="place-sub">{{item.pay_nickname}} 付 · {{item.bill_type === 1 ? '集体' : '个人'}}</view>
+            <view class="place-sub">
+              {{item.pay_nickname}} 付{{item.share_hint ? ' · ' + item.share_hint : ''}}{{item.cost_type_label ? ' · ' + item.cost_type_label : ''}}{{item.plan_place_name ? ' · ' + item.plan_place_name : ''}}
+            </view>
           </view>
-          <view class="bill-amt">¥{{item.amount}}</view>
+          <view class="bill-amt-col">
+            <view class="bill-amt">¥{{item.display_amount}}</view>
+            <view class="bill-amt-sub" wx:if="{{item.display_sub}}">{{item.display_sub}}</view>
+          </view>
         </view>
       </view>
       <view class="empty-card" wx:if="{{!bills.length}}">
-        <view class="empty-title">还没有账单</view>
-        <view class="empty-sub">餐饮购物都可以直接记</view>
+        <view class="empty-title">{{billEmptyTitle}}</view>
+        <view class="empty-sub">{{billEmptySub}}</view>
       </view>
       <view class="fab-space"></view>
     </view>
 
     <view wx:if="{{mode === 'browse' && tab === 'member'}}" class="body-pad">
-      <view class="place-card invite">
-        <view>
+      <view class="invite-card">
+        <view class="invite-left">
           <view class="stat-k">邀请码</view>
           <view class="invite-code">{{trip.invite_code}}</view>
+          <view class="invite-hint">好友输入邀请码即可加入</view>
         </view>
-        <view class="soft-btn mini" bind:tap="copyCode">复制</view>
+        <view class="invite-copy" bind:tap="copyCode">复制</view>
       </view>
-      <view class="place-card member" wx:for="{{members}}" wx:key="user_id">
-        <view class="member-top">
-          <view class="member-main">
-            <t-avatar size="small" image="{{item.avatar}}" />
-            <view>
-              <view class="place-name">{{item.nickname}}</view>
-              <view class="place-sub">{{item.perm_text || item.role_text}}</view>
-            </view>
+
+      <view class="list-head">
+        <view class="list-title">成员与团体</view>
+        <view
+          class="list-add"
+          wx:if="{{!trip.is_sample && trip.status !== 2 && trip.role === 1}}"
+          bind:tap="addCompanion"
+        >＋ 随行</view>
+      </view>
+      <view class="member-tip">点成员可设置团体与权限</view>
+
+      <view class="group-card" wx:for="{{memberGroups}}" wx:key="key">
+        <view class="group-head">
+          <view class="group-head-l">
+            <text class="group-dot {{item.isGroup ? 'on' : ''}}"></text>
+            <text class="group-title">{{item.title}}</text>
           </view>
-          <text class="danger" wx:if="{{!trip.is_sample && trip.status !== 2 && trip.role === 1 && item.role !== 1}}" bind:tap="removeMember" data-id="{{item.user_id}}">移除</text>
+          <text class="group-n">{{item.members.length}}</text>
         </view>
-        <view class="perm-row" wx:if="{{!trip.is_sample && trip.status !== 2 && trip.role === 1 && item.role !== 1}}">
-          <view class="perm-chip {{item.can_edit ? 'on' : ''}}" catch:tap="togglePerm" data-id="{{item.user_id}}" data-k="can_edit">改行程</view>
-          <view class="perm-chip {{item.can_bill ? 'on' : ''}}" catch:tap="togglePerm" data-id="{{item.user_id}}" data-k="can_bill">记账</view>
+        <view class="member-wrap">
+          <view
+            class="m-chip {{m.role === 1 ? 'leader' : ''}} {{m.is_guest ? 'guest' : ''}}"
+            wx:for="{{item.members}}"
+            wx:for-item="m"
+            wx:key="user_id"
+            bind:tap="onMemberTap"
+            data-id="{{m.user_id}}"
+          >
+            <view class="m-avatar" wx:if="{{m.avatar}}" style="background-image:url({{m.avatar}})"></view>
+            <view class="m-avatar letter" wx:else>{{m.nickLetter}}</view>
+            <text class="m-name">{{m.nickname}}</text>
+            <text class="m-tag" wx:if="{{m.role === 1}}">团</text>
+            <text class="m-tag soft" wx:elif="{{m.can_edit || m.can_bill}}">权</text>
+          </view>
         </view>
       </view>
-      <view class="soft-btn" wx:if="{{!trip.is_sample && trip.status !== 2 && trip.role === 1}}" bind:tap="toggleLock">{{trip.is_lock ? '解锁结算' : '锁定结算'}}</view>
-      <view class="soft-btn ghost" wx:if="{{!trip.is_sample && trip.status !== 2 && trip.role === 1}}" bind:tap="archive">归档旅途</view>
-      <view class="soft-btn ghost" wx:if="{{!trip.is_sample && trip.role !== 1}}" bind:tap="quit">退出旅途</view>
+
+      <view class="empty-card" wx:if="{{!members.length}}">
+        <view class="empty-title">还没有成员</view>
+        <view class="empty-sub">分享邀请码，或添加随行成员</view>
+      </view>
+
+      <view class="mgmt-card" wx:if="{{!trip.is_sample && trip.status !== 2}}">
+        <view class="mgmt-title">旅途管理</view>
+        <view class="mgmt-row last" wx:if="{{trip.role === 1 && isCreator}}" bind:tap="archive">
+          <view>
+            <view class="mgmt-k">归档旅途</view>
+            <view class="mgmt-v">仅创建人可操作 · 归档后不可再改账，可看分账</view>
+          </view>
+          <text class="settle-arrow">›</text>
+        </view>
+        <view class="mgmt-row last" wx:if="{{trip.role !== 1}}" bind:tap="quit">
+          <view>
+            <view class="mgmt-k danger-text">退出旅途</view>
+            <view class="mgmt-v">退出后不再看到本团账单</view>
+          </view>
+          <text class="settle-arrow">›</text>
+        </view>
+      </view>
     </view>
   </scroll-view>
 
-  <view class="fab-wrap {{mode === 'edit' ? 'above-bar' : ''}}" wx:if="{{mode === 'edit'}}">
-    <t-fab icon="add" bind:click="quickAddEnd" />
-  </view>
   <view class="fab-wrap" wx:if="{{mode === 'browse' && canBill && tab === 'bill'}}">
     <t-fab icon="add" bind:click="addBill" />
   </view>
 
   <view class="edit-bar" wx:if="{{mode === 'edit'}}">
-    <view class="edit-bar-btn ghost" bind:tap="generateRoutes">{{routesReady ? '重新预览' : '预览行程'}}</view>
+    <view class="edit-bar-btn add" bind:tap="quickAddEnd">＋ 地点</view>
+    <view class="edit-bar-btn ghost" bind:tap="generateRoutes">{{routesReady ? '重新预览' : '预览'}}</view>
     <view class="edit-bar-btn main" bind:tap="finishEdit">完成并保存</view>
   </view>
 </view>

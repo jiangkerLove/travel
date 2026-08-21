@@ -1,2 +1,136 @@
-.in { color: #008858; }
-.out { color: #d54941; }
+page {
+  background: #f3f6f3;
+}
+
+.settle-page {
+  min-height: 100vh;
+  padding: 20rpx 28rpx 80rpx;
+  box-sizing: border-box;
+  background:
+    radial-gradient(ellipse 80% 45% at 0% -5%, rgba(111, 155, 136, 0.12), transparent 55%),
+    #f3f6f3;
+}
+
+.intro {
+  margin-bottom: 20rpx;
+  padding: 8rpx 8rpx 4rpx;
+}
+
+.intro-title {
+  font-size: 28rpx;
+  font-weight: 650;
+  color: #2f3d36;
+}
+
+.intro-sub {
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  color: #8a9a90;
+  line-height: 1.5;
+}
+
+.sec-title {
+  margin: 20rpx 8rpx 14rpx;
+  font-size: 22rpx;
+  color: #8a9a90;
+  letter-spacing: 1rpx;
+}
+
+.card {
+  background: #fff;
+  border-radius: 24rpx;
+  padding: 26rpx 28rpx;
+  margin-bottom: 12rpx;
+  box-shadow: 0 8rpx 24rpx rgba(80, 110, 96, 0.04);
+}
+
+.card.nested {
+  margin-left: 0;
+  background: #f8faf8;
+  box-shadow: none;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16rpx;
+}
+
+.card-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.title {
+  font-size: 30rpx;
+  font-weight: 650;
+  color: #2f3d36;
+}
+
+.muted {
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  color: #9aa89f;
+  line-height: 1.4;
+}
+
+.names {
+  margin-top: 10rpx;
+  font-size: 22rpx;
+  color: #7d8c84;
+  line-height: 1.5;
+}
+
+.amount {
+  flex-shrink: 0;
+  font-size: 30rpx;
+  font-weight: 650;
+}
+
+.amount.in { color: #008858; }
+.amount.out { color: #e37318; }
+
+.empty {
+  margin: 0 0 16rpx;
+  padding: 28rpx;
+  text-align: center;
+  font-size: 24rpx;
+  color: #9aa89f;
+  background: #fff;
+  border-radius: 24rpx;
+}
+
+.empty.soft {
+  background: transparent;
+  padding: 12rpx 8rpx 20rpx;
+}
+
+.inner-block {
+  margin-bottom: 12rpx;
+}
+
+.inner-head {
+  margin: 4rpx 8rpx 12rpx;
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #5d8a76;
+}
+
+.soft-btn {
+  margin-top: 32rpx;
+  padding: 26rpx;
+  border-radius: 999rpx;
+  text-align: center;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #4f6f62;
+  background: #fff;
+  border: 1rpx solid #d7e4dc;
+}
+
+.soft-btn.main {
+  background: #6f9b88;
+  color: #fff;
+  border-color: #6f9b88;
+}

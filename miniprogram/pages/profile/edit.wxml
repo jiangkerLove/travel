@@ -1,0 +1,34 @@
+<view class="edit-page">
+  <view class="card">
+    <view class="cell">
+      <text class="label">头像</text>
+      <view class="cell-right">
+        <button
+          class="avatar-btn"
+          open-type="chooseAvatar"
+          hover-class="none"
+          bindchooseavatar="onChooseAvatar"
+        >
+          <image wx:if="{{avatar}}" class="avatar" src="{{avatar}}" mode="aspectFill" />
+          <view wx:else class="avatar fallback">{{initial}}</view>
+        </button>
+      </view>
+    </view>
+    <view class="line"></view>
+    <view class="cell">
+      <text class="label">昵称</text>
+      <input
+        class="nick"
+        type="nickname"
+        placeholder="请输入昵称"
+        placeholder-class="ph"
+        value="{{nickname}}"
+        maxlength="20"
+        bindinput="onNickInput"
+        bindchange="onNickChange"
+      />
+    </view>
+  </view>
+
+  <view class="save {{dirty ? '' : 'disabled'}}" bind:tap="onSave">保存</view>
+</view>

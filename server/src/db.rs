@@ -38,8 +38,10 @@ pub struct MemberRow {
     pub role: i16,
     pub can_edit: bool,
     pub can_bill: bool,
+    pub group_name: Option<String>,
     pub nickname: String,
     pub avatar: Option<String>,
+    pub open_id: String,
 }
 
 #[derive(sqlx::FromRow, Clone)]
@@ -73,7 +75,8 @@ pub async fn find_user(pool: &PgPool, id: i64) -> Result<UserRow, AppError> {
 pub async fn require_member(pool: &PgPool, travel_id: i64, user_id: i64) -> Result<MemberRow, AppError> {
     sqlx::query_as::<_, MemberRow>(
         r#"
-        SELECT m.id, m.travel_id, m.user_id, m.role, m.can_edit, m.can_bill, u.nickname, u.avatar
+        SELECT m.id, m.travel_id, m.user_id, m.role, m.can_edit, m.can_bill, m.group_name,
+               u.nickname, u.avatar, u.open_id
         FROM travel_member m
         JOIN app_user u ON u.id = m.user_id
         WHERE m.travel_id = $1 AND m.user_id = $2
@@ -143,11 +146,16 @@ pub async fn find_travel(pool: &PgPool, id: i64) -> Result<TravelRow, AppError> 
 pub async fn list_members(pool: &PgPool, travel_id: i64) -> Result<Vec<MemberRow>, AppError> {
     Ok(sqlx::query_as::<_, MemberRow>(
         r#"
-        SELECT m.id, m.travel_id, m.user_id, m.role, m.can_edit, m.can_bill, u.nickname, u.avatar
+        SELECT m.id, m.travel_id, m.user_id, m.role, m.can_edit, m.can_bill, m.group_name,
+               u.nickname, u.avatar, u.open_id
         FROM travel_member m
         JOIN app_user u ON u.id = m.user_id
         WHERE m.travel_id = $1
-        ORDER BY m.role DESC, m.join_time ASC
+        ORDER BY
+          CASE WHEN NULLIF(TRIM(m.group_name), '') IS NULL THEN 1 ELSE 0 END,
+          m.group_name NULLS LAST,
+          m.role DESC,
+          m.join_time ASC
         "#,
     )
     .bind(travel_id)

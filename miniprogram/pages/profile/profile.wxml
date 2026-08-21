@@ -1,16 +1,11 @@
 <view class="me-page">
-  <view class="hero">
-    <button class="avatar-btn" open-type="chooseAvatar" bindchooseavatar="onChooseAvatar">
-      <image wx:if="{{user.avatar}}" class="avatar" src="{{user.avatar}}" mode="aspectFill" />
-      <view wx:else class="avatar fallback">{{initial}}</view>
-    </button>
-    <input
-      class="nick"
-      type="nickname"
-      placeholder="旅行者"
-      value="{{user.nickname}}"
-      bindblur="onNickBlur"
-    />
+  <view class="user-card" hover-class="user-card-hover" bind:tap="goEdit">
+    <image wx:if="{{user.avatar}}" class="avatar" src="{{user.avatar}}" mode="aspectFill" />
+    <view wx:else class="avatar fallback">{{initial}}</view>
+    <view class="user-meta">
+      <view class="nick">{{user.nickname}}</view>
+    </view>
+    <view class="arrow">›</view>
   </view>
 
   <view class="menu">
@@ -20,15 +15,15 @@
       <view class="menu-arrow">›</view>
     </view>
     <view class="menu-line"></view>
-    <view class="menu-item" hover-class="menu-item-hover" bind:tap="goPrivacy">
-      <view class="menu-mark">隐</view>
-      <view class="menu-text">隐私设置</view>
+    <button class="menu-item menu-btn" hover-class="menu-item-hover" open-type="feedback">
+      <view class="menu-mark">意</view>
+      <view class="menu-text">意见反馈</view>
       <view class="menu-arrow">›</view>
-    </view>
+    </button>
     <view class="menu-line"></view>
     <view class="menu-item" hover-class="menu-item-hover" bind:tap="goAbout">
       <view class="menu-mark">关</view>
-      <view class="menu-text">关于</view>
+      <view class="menu-text">关于我们</view>
       <view class="menu-arrow">›</view>
     </view>
   </view>

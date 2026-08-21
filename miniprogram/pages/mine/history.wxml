@@ -3,7 +3,10 @@
   <view class="card" wx:for="{{list}}" wx:key="id" bind:tap="openTrip" data-id="{{item.id}}">
     <view class="row space-between">
       <view class="title">{{item.travel_name}}</view>
-      <view class="status-pill status-2">已归档</view>
+      <view class="pill-row">
+        <view class="status-pill sample" wx:if="{{item.is_sample}}">示例</view>
+        <view class="status-pill status-2">已归档</view>
+      </view>
     </view>
     <view class="muted">{{item.destination}} · {{item.start_date}} 至 {{item.end_date}}</view>
   </view>

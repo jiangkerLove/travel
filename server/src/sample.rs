@@ -5,7 +5,7 @@ use sqlx::PgPool;
 use crate::{error::AppError, util::split_amount};
 
 pub const SAMPLE_REMARK: &str =
-    "【示例攻略】成都出发，四姑娘山—丹巴—新都桥小环线。只读示例，可看行程与分账，不可编辑。";
+    "【示例攻略】成都出发，四姑娘山—丹巴—新都桥小环线。已结束示例，可看行程、账单与分账，不可编辑。";
 
 pub fn is_sample_remark(remark: &Option<String>) -> bool {
     remark
@@ -17,13 +17,13 @@ pub fn should_grant_sample(open_id: &str) -> bool {
     !open_id.starts_with("demo_") && !open_id.starts_with("sys_guide_")
 }
 
-/// 无真实行程时准备一份只读示例；示例不进归档列表，有真实行程后首页不再展示。
+/// 无真实行程时准备一份已归档的只读示例；有进行中的真实行程后首页不再展示。
 pub async fn ensure_sample_travel(pool: &PgPool, user_id: i64) -> Result<(), AppError> {
-    // 纠正此前误归档的示例，并保持只读
+    // 统一为已归档只读，便于查看智能分账
     sqlx::query(
         r#"
         UPDATE travel t
-        SET status = 0,
+        SET status = 2,
             is_lock = TRUE,
             remark = $2
         FROM travel_member m
@@ -97,8 +97,9 @@ pub async fn create_sample_travel(
     companion_ids: Option<[i64; 2]>,
     invite_code: Option<&str>,
 ) -> Result<i64, AppError> {
-    let start = chrono::Local::now().date_naive();
-    let end = start + Duration::days(3);
+    // 已结束的四天行程，便于直接看账单与分账
+    let end = chrono::Local::now().date_naive() - Duration::days(7);
+    let start = end - Duration::days(3);
     create_sample_travel_with_dates(pool, creator_id, companion_ids, invite_code, start, end).await
 }
 
@@ -124,7 +125,7 @@ pub async fn create_sample_travel_with_dates(
     let travel_id: i64 = sqlx::query_scalar(
         r#"
         INSERT INTO travel (travel_name, destination, start_date, end_date, invite_code, creator_id, remark, status, is_lock)
-        VALUES ('川西小环线', '四姑娘山 · 丹巴', $1, $2, $3, $4, $5, 0, TRUE)
+        VALUES ('川西小环线', '四姑娘山 · 丹巴', $1, $2, $3, $4, $5, 2, TRUE)
         RETURNING id
         "#,
     )
@@ -163,7 +164,7 @@ pub async fn create_sample_travel_with_dates(
         },
         PlanSeed {
             day: 1,
-            ptype: "via",
+            ptype: "sight",
             name: "映秀镇",
             lng: 103.484,
             lat: 31.048,

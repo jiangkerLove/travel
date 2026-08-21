@@ -66,7 +66,7 @@ App({
       open_id: localOpenId(),
     })
     if (!data || !data.user || !data.user.open_id) {
-      throw new Error('未拿到微信 OpenID，请重启后端后再试')
+      throw new Error('登录失败，请稍后重试')
     }
     this.setUser(data.user, data.token)
     return data.user

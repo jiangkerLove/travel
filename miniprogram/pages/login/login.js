@@ -4,8 +4,8 @@ Page({
   data: {
     nickname: '',
     avatar: '',
+    busy: false,
   },
-  onShow() {},
   onNick(e) {
     this.setData({ nickname: e.detail.value })
   },
@@ -13,32 +13,24 @@ Page({
     this.setData({ avatar: e.detail.avatarUrl })
   },
   async onWxLogin() {
+    if (this.data.busy) return
+    this.setData({ busy: true })
     wx.showLoading({ title: '进入中' })
     try {
       await getApp().silentLogin()
+      const nickname = (this.data.nickname || '').trim()
+      const avatar = this.data.avatar
+      if (nickname || avatar) {
+        const payload = {}
+        if (nickname) payload.nickname = nickname
+        if (avatar) payload.avatar = avatar
+        const user = await api.updateUser(payload)
+        getApp().setUser(user)
+      }
       wx.switchTab({ url: '/pages/index/index' })
     } finally {
       wx.hideLoading()
-    }
-  },
-  async onDemo(e) {
-    const { id, name } = e.currentTarget.dataset
-    wx.showLoading({ title: '切换中' })
-    try {
-      const data = await api.login({ open_id: id, nickname: name })
-      getApp().setUser(data.user, data.token)
-      wx.switchTab({ url: '/pages/index/index' })
-    } finally {
-      wx.hideLoading()
-    }
-  },
-  async onSeed() {
-    wx.showLoading({ title: '导入中' })
-    try {
-      const data = await api.seed()
-      wx.showToast({ title: `邀请码 ${data.invite_code}`, icon: 'none' })
-    } finally {
-      wx.hideLoading()
+      this.setData({ busy: false })
     }
   },
 })

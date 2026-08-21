@@ -1,0 +1,104 @@
+page {
+  background: #f3f6f3;
+}
+
+.edit-page {
+  min-height: 100vh;
+  padding: 28rpx 32rpx 80rpx;
+  box-sizing: border-box;
+}
+
+.card {
+  background: #fff;
+  border-radius: 24rpx;
+  overflow: hidden;
+  box-shadow: 0 8rpx 24rpx rgba(80, 110, 96, 0.04);
+}
+
+.cell {
+  display: flex;
+  align-items: center;
+  min-height: 108rpx;
+  padding: 0 28rpx;
+  box-sizing: border-box;
+}
+
+.label {
+  width: 120rpx;
+  flex-shrink: 0;
+  font-size: 30rpx;
+  color: #2f3d36;
+}
+
+.cell-right {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.avatar-btn {
+  width: 80rpx;
+  height: 80rpx;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border-radius: 50%;
+  overflow: hidden;
+  line-height: 0;
+}
+.avatar-btn::after { border: none; }
+
+.avatar {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 50%;
+  background: #e7f1eb;
+  display: block;
+}
+
+.fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #5d8a76;
+  font-size: 30rpx;
+  font-weight: 650;
+}
+
+.nick {
+  flex: 1;
+  height: 64rpx;
+  font-size: 30rpx;
+  color: #2f3d36;
+  text-align: right;
+}
+
+.ph {
+  color: #b4c2ba;
+}
+
+.line {
+  height: 1rpx;
+  margin-left: 28rpx;
+  background: #eef3ef;
+}
+
+.save {
+  margin-top: 48rpx;
+  height: 92rpx;
+  border-radius: 999rpx;
+  background: #6f9b88;
+  color: #fff;
+  font-size: 30rpx;
+  font-weight: 650;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 12rpx 28rpx rgba(111, 155, 136, 0.28);
+}
+
+.save.disabled {
+  opacity: 0.4;
+  box-shadow: none;
+}

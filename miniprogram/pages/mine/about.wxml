@@ -1,9 +1,18 @@
-<view class="page">
+<view class="about-page">
+  <image class="mark" src="/images/brand-mark.png" mode="aspectFit" />
+  <view class="name">旅途计划</view>
+  <view class="ver">版本 1.0.0</view>
+
   <view class="card">
-    <view class="title">结伴出行</view>
-    <view class="muted" style="margin-top: 12rpx">多人旅行行程规划 · 智能记账分账</view>
-    <view class="muted" style="margin-top: 24rpx">V1.0 初版</view>
-    <view class="muted">前端：微信原生小程序 + TDesign</view>
-    <view class="muted">后端：Rust Axum + PostgreSQL</view>
+    <view class="p">
+      「旅途计划」面向结伴出行的朋友，帮助大家共同规划行程路线，记录旅途开销，并在行程结束后清晰完成分账。
+    </view>
+    <view class="p">
+      我们希望把复杂的路线与账目，变得简单、透明、可协作，让每一次出行都更从容。
+    </view>
+  </view>
+
+  <view class="meta">
+    <view class="copy">旅途计划 · 保留所有权利</view>
   </view>
 </view>

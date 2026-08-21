@@ -1,5 +1,3 @@
-const { api } = require('../../utils/api')
-
 function decorateUser(user) {
   const u = user || {}
   const name = u.nickname || '旅行者'
@@ -24,22 +22,7 @@ Page({
     const u = decorateUser(user)
     this.setData({ user: u, initial: u.initial })
   },
-  onChooseAvatar(e) {
-    const avatar = e.detail.avatarUrl
-    api.updateUser({ avatar }).then((user) => {
-      getApp().setUser(user)
-      this.applyUser(user)
-    })
-  },
-  onNickBlur(e) {
-    const nickname = (e.detail.value || '').trim()
-    if (!nickname || nickname === this.data.user.nickname) return
-    api.updateUser({ nickname }).then((user) => {
-      getApp().setUser(user)
-      this.applyUser(user)
-    })
-  },
+  goEdit() { wx.navigateTo({ url: '/pages/profile/edit' }) },
   goHistory() { wx.navigateTo({ url: '/pages/mine/history' }) },
-  goPrivacy() { wx.navigateTo({ url: '/pages/mine/privacy' }) },
   goAbout() { wx.navigateTo({ url: '/pages/mine/about' }) },
 })

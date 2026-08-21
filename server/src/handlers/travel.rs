@@ -87,6 +87,8 @@ pub struct MemberVo {
     pub can_edit: bool,
     pub can_bill: bool,
     pub perm_text: String,
+    pub group_name: Option<String>,
+    pub is_guest: bool,
 }
 
 #[derive(sqlx::FromRow)]
@@ -126,8 +128,17 @@ fn to_vo(t: &TravelRow, member_count: i64, role: i16, can_edit: bool, can_bill: 
 fn member_vo(m: &MemberRow) -> MemberVo {
     let can_edit = m.role == 1 || m.can_edit;
     let can_bill = m.role == 1 || m.can_bill;
+    let is_guest = m.open_id.starts_with("guest_");
+    let group = m
+        .group_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
     let perm_text = if m.role == 1 {
         "团长".into()
+    } else if is_guest {
+        "随行成员".into()
     } else {
         let mut bits = vec!["可看路线"];
         if can_edit {
@@ -148,6 +159,8 @@ fn member_vo(m: &MemberRow) -> MemberVo {
         can_edit,
         can_bill,
         perm_text,
+        group_name: group,
+        is_guest,
     }
 }
 
@@ -216,7 +229,7 @@ pub async fn list(
 ) -> Result<Json<ApiOk<Vec<TravelVo>>>, AppError> {
     let archived = q.archived.unwrap_or(false);
     let rows: Vec<TravelListRow> = if archived {
-        // 归档列表：不放示例攻略
+        // 归档列表：含已结束的示例攻略
         sqlx::query_as(
             r#"
             SELECT t.id, t.travel_name, t.destination, t.start_date, t.end_date, t.invite_code,
@@ -227,15 +240,16 @@ pub async fn list(
             JOIN travel_member m ON m.travel_id = t.id
             WHERE m.user_id = $1
               AND t.status = 2
-              AND (t.remark IS NULL OR t.remark NOT LIKE '【示例攻略】%')
-            ORDER BY t.create_time DESC
+            ORDER BY
+              CASE WHEN t.remark LIKE '【示例攻略】%' THEN 0 ELSE 1 END,
+              t.create_time DESC
             "#,
         )
         .bind(user.id)
         .fetch_all(&state.pool)
         .await?
     } else {
-        // 进行中：有真实行程时隐藏示例；没有时才展示示例
+        // 进行中：真实行程；无真实行程时额外展示示例（示例本身已归档）
         sqlx::query_as(
             r#"
             SELECT t.id, t.travel_name, t.destination, t.start_date, t.end_date, t.invite_code,
@@ -245,16 +259,21 @@ pub async fn list(
             FROM travel t
             JOIN travel_member m ON m.travel_id = t.id
             WHERE m.user_id = $1
-              AND t.status <> 2
               AND (
-                (t.remark IS NULL OR t.remark NOT LIKE '【示例攻略】%')
-                OR NOT EXISTS (
-                  SELECT 1
-                  FROM travel t2
-                  JOIN travel_member m2 ON m2.travel_id = t2.id
-                  WHERE m2.user_id = $1
-                    AND t2.status <> 2
-                    AND (t2.remark IS NULL OR t2.remark NOT LIKE '【示例攻略】%')
+                (
+                  t.status <> 2
+                  AND (t.remark IS NULL OR t.remark NOT LIKE '【示例攻略】%')
+                )
+                OR (
+                  t.remark LIKE '【示例攻略】%'
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM travel t2
+                    JOIN travel_member m2 ON m2.travel_id = t2.id
+                    WHERE m2.user_id = $1
+                      AND t2.status <> 2
+                      AND (t2.remark IS NULL OR t2.remark NOT LIKE '【示例攻略】%')
+                  )
                 )
               )
             ORDER BY
@@ -415,13 +434,16 @@ pub async fn archive(
 ) -> Result<Json<ApiOk<serde_json::Value>>, AppError> {
     require_leader(&state.pool, req.travel_id, user.id).await?;
     let t = find_travel(&state.pool, req.travel_id).await?;
+    if t.creator_id != user.id {
+        return Err(AppError::Forbidden("仅旅途创建人可归档".into()));
+    }
     if crate::sample::is_sample_remark(&t.remark) {
         return Err(AppError::BadRequest("示例旅途不可归档".into()));
     }
     if t.status == 2 {
         return Err(AppError::BadRequest("旅途已归档".into()));
     }
-    sqlx::query("UPDATE travel SET status = 2 WHERE id = $1")
+    sqlx::query("UPDATE travel SET status = 2, is_lock = TRUE WHERE id = $1")
         .bind(req.travel_id)
         .execute(&state.pool)
         .await?;
@@ -502,6 +524,98 @@ pub async fn set_perm(
         .bind(req.user_id)
         .bind(can_edit)
         .bind(can_bill)
+        .execute(&state.pool)
+        .await?;
+    let updated = require_member(&state.pool, req.travel_id, req.user_id).await?;
+    Ok(ok(member_vo(&updated)))
+}
+
+#[derive(Deserialize)]
+pub struct AddCompanionReq {
+    pub travel_id: i64,
+    pub nickname: String,
+    pub group_name: Option<String>,
+}
+
+/// 团长添加随行成员（可无微信账号，用于按人头分账、按团体汇总）
+pub async fn add_companion(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Json(req): Json<AddCompanionReq>,
+) -> Result<Json<ApiOk<MemberVo>>, AppError> {
+    require_leader(&state.pool, req.travel_id, user.id).await?;
+    let t = find_travel(&state.pool, req.travel_id).await?;
+    if crate::sample::is_sample_remark(&t.remark) || t.status == 2 {
+        return Err(AppError::BadRequest("已归档/示例旅途不可加人".into()));
+    }
+    let nickname = req.nickname.trim();
+    if nickname.is_empty() || nickname.chars().count() > 20 {
+        return Err(AppError::BadRequest("请填写 1–20 字昵称".into()));
+    }
+    let group = req
+        .group_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.chars().take(20).collect::<String>());
+
+    let open_id = format!("guest_{}_{}", req.travel_id, gen_invite_code().to_lowercase());
+    let mut tx = state.pool.begin().await?;
+    let uid: i64 = sqlx::query_scalar(
+        r#"
+        INSERT INTO app_user (open_id, nickname, avatar)
+        VALUES ($1, $2, NULL)
+        RETURNING id
+        "#,
+    )
+    .bind(&open_id)
+    .bind(nickname)
+    .fetch_one(&mut *tx)
+    .await?;
+    sqlx::query(
+        r#"
+        INSERT INTO travel_member (travel_id, user_id, role, can_edit, can_bill, group_name)
+        VALUES ($1, $2, 0, FALSE, FALSE, $3)
+        "#,
+    )
+    .bind(req.travel_id)
+    .bind(uid)
+    .bind(group.as_deref())
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    let m = require_member(&state.pool, req.travel_id, uid).await?;
+    Ok(ok(member_vo(&m)))
+}
+
+#[derive(Deserialize)]
+pub struct SetGroupReq {
+    pub travel_id: i64,
+    pub user_id: i64,
+    pub group_name: Option<String>,
+}
+
+pub async fn set_group(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Json(req): Json<SetGroupReq>,
+) -> Result<Json<ApiOk<MemberVo>>, AppError> {
+    require_leader(&state.pool, req.travel_id, user.id).await?;
+    let t = find_travel(&state.pool, req.travel_id).await?;
+    if crate::sample::is_sample_remark(&t.remark) || t.status == 2 {
+        return Err(AppError::BadRequest("已归档/示例旅途不可改团体".into()));
+    }
+    require_member(&state.pool, req.travel_id, req.user_id).await?;
+    let group = req
+        .group_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.chars().take(20).collect::<String>());
+    sqlx::query("UPDATE travel_member SET group_name=$3 WHERE travel_id=$1 AND user_id=$2")
+        .bind(req.travel_id)
+        .bind(req.user_id)
+        .bind(group.as_deref())
         .execute(&state.pool)
         .await?;
     let updated = require_member(&state.pool, req.travel_id, req.user_id).await?;

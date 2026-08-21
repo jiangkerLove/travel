@@ -3,6 +3,7 @@
     "pages/boot/boot",
     "pages/index/index",
     "pages/profile/profile",
+    "pages/profile/edit",
     "pages/login/login",
     "pages/travel/create",
     "pages/travel/join",
@@ -12,11 +13,10 @@
     "pages/bill/edit",
     "pages/settle/settle",
     "pages/mine/history",
-    "pages/mine/privacy",
     "pages/mine/about"
   ],
   "window": {
-    "navigationBarTitleText": "结伴出行",
+    "navigationBarTitleText": "旅途计划",
     "navigationBarBackgroundColor": "#F5F7FB",
     "navigationBarTextStyle": "black",
     "backgroundColor": "#F5F7FB",

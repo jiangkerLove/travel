@@ -82,7 +82,7 @@ pub fn split_amount(total: Decimal, n: usize) -> Vec<Decimal> {
 }
 
 pub fn valid_point_type(v: &str) -> bool {
-    matches!(v, "sight" | "hotel" | "food" | "gas" | "transport" | "via")
+    matches!(v, "sight" | "hotel" | "food" | "gas" | "transport")
 }
 
 pub fn valid_traffic_type(v: &str) -> bool {
@@ -100,7 +100,6 @@ pub fn default_cost_of_point(point_type: &str) -> &'static str {
         "food" => "food",
         "gas" => "gas",
         "transport" => "transport",
-        "via" => "other",
         _ => "other",
     }
 }

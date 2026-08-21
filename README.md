@@ -1,4 +1,4 @@
-# 结伴出行 · 初版
+# 旅途计划 · 初版
 
 多人旅行行程规划 + 智能记账分账。后端 Axum + PostgreSQL，前端微信原生小程序 + TDesign。
 
@@ -24,6 +24,14 @@ CREATE DATABASE travel OWNER travel;
 
 默认连接：`postgres://travel:travel@127.0.0.1:5432/travel`
 
+重新初始化（清空数据）：
+
+```bash
+docker compose down -v
+docker compose up -d
+cd server && cargo run   # 启动时自动执行 server/migrations/001_init.sql
+```
+
 ## 2. 启动后端
 
 ```bash
@@ -31,7 +39,7 @@ cd C:\Users\MSI\project\travel\server
 cargo run
 ```
 
-服务地址 `http://127.0.0.1:3000`，启动时自动执行 migrations。
+服务地址 `http://127.0.0.1:3000`，启动时自动执行 `migrations/`（当前仅一份完整建表脚本）。
 
 微信登录：在 `server/.env` 填写 `WECHAT_APPID` / `WECHAT_SECRET`。不填则走开发登录（昵称或演示账号）。
 
@@ -53,7 +61,7 @@ npm install
 
 ## 4. 演示路径
 
-新注册用户（还没有任何旅途）登录后，列表里会自动出现「川西小环线」示例攻略，可直接看行程、路书、账单和分账。体验完由团长归档即可。
+新注册用户（还没有任何旅途）登录后，会自动出现已结束的「川西小环线」示例，可直接看行程、账单和智能分账；新建真实旅途后，示例可在「历史旅途」中继续查看。
 
 开发环境也可在登录页：
 

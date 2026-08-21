@@ -1,18 +1,42 @@
-<view class="page">
-  <view class="card" wx:for="{{users}}" wx:key="user_id">
-    <view class="row space-between">
-      <view class="title">{{item.nickname}}</view>
-      <view class="amount {{item.net >= 0 ? 'in' : 'out'}}">{{item.net >= 0 ? '+' : ''}}¥{{item.net}}</view>
-    </view>
-    <view class="muted">垫付 ¥{{item.paid}} · 应付 ¥{{item.owed}}</view>
+<view class="settle-page">
+  <view class="intro">
+    <view class="intro-title">结算说明</view>
+    <view class="intro-sub">旅途已归档，账单不再变动。未入团体各自算一边；同名团体对外汇总，内部可再分账。</view>
   </view>
 
-  <view class="title" style="margin: 16rpx 8rpx">转账清单</view>
-  <t-empty wx:if="{{!transfers.length}}" description="已经扯平，无需转账" />
-  <view class="card" wx:for="{{transfers}}" wx:key="index">
-    <view class="title">{{item.from_nickname}} → {{item.to_nickname}}</view>
+  <view class="sec-title">对外结余</view>
+  <view class="card" wx:for="{{groups}}" wx:key="group_key">
+    <view class="row">
+      <view class="card-main">
+        <view class="title">{{item.group_name}}</view>
+        <view class="muted" wx:if="{{item.is_party}}">
+          团体 {{item.member_count}} 人 · 垫付 ¥{{item.paid}} · 应付 ¥{{item.owed}}
+        </view>
+        <view class="muted" wx:else>单独结算 · 垫付 ¥{{item.paid}} · 应付 ¥{{item.owed}}</view>
+        <view class="names" wx:if="{{item.is_party && item.members.length}}">
+          <text wx:for="{{item.members}}" wx:for-item="m" wx:key="user_id">{{m.nickname}} </text>
+        </view>
+      </view>
+      <view class="amount {{item.net >= 0 ? 'in' : 'out'}}">{{item.net >= 0 ? '+' : ''}}¥{{item.net}}</view>
+    </view>
+  </view>
+
+  <view class="sec-title">对外转账</view>
+  <view class="empty" wx:if="{{!groupTransfers.length}}">对外已扯平</view>
+  <view class="card" wx:for="{{groupTransfers}}" wx:key="index">
+    <view class="title">{{item.from_group}} → {{item.to_group}}</view>
     <view class="amount in">¥{{item.amount}}</view>
   </view>
 
-  <t-button wx:if="{{is_leader}}" theme="primary" block bind:tap="toggleLock">{{is_lock ? '解锁结算' : '锁定结算'}}</t-button>
+  <block wx:if="{{innerGroups.length}}">
+    <view class="sec-title">团体内部转账</view>
+    <view class="inner-block" wx:for="{{innerGroups}}" wx:key="group_key">
+      <view class="inner-head">{{item.group_name}}</view>
+      <view class="empty soft" wx:if="{{!item.inner_transfers.length}}">内部已扯平</view>
+      <view class="card nested" wx:for="{{item.inner_transfers}}" wx:for-item="t" wx:key="index">
+        <view class="title">{{t.from_nickname}} → {{t.to_nickname}}</view>
+        <view class="amount in">¥{{t.amount}}</view>
+      </view>
+    </view>
+  </block>
 </view>

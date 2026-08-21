@@ -75,9 +75,13 @@ page {
 .trip {
   background: #fff;
   border-radius: 28rpx;
-  padding: 28rpx 28rpx 8rpx;
+  padding: 28rpx;
   margin-bottom: 24rpx;
   box-shadow: 0 10rpx 28rpx rgba(80, 110, 96, 0.04);
+}
+
+.trip.tapable:active {
+  background: #f6faf7;
 }
 
 .trip-top {
@@ -163,31 +167,3 @@ page {
 
 .trip-meta .dot { margin: 0 8rpx; }
 
-.trip-split {
-  display: flex;
-  align-items: center;
-  margin-top: 12rpx;
-  border-top: 1rpx solid #eef3ef;
-}
-
-.split-item {
-  flex: 1;
-  text-align: center;
-  padding: 24rpx 0;
-  font-size: 26rpx;
-  color: #4f6f62;
-}
-
-.split-item.off {
-  color: #c5d0c9;
-}
-
-.split-item-hover {
-  background: #f6faf7;
-}
-
-.split-line {
-  width: 1rpx;
-  height: 28rpx;
-  background: #e3ece6;
-}

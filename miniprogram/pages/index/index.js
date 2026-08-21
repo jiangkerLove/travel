@@ -10,8 +10,9 @@ function decorate(list) {
     ...t,
     rangeText: `${prettyDate(t.start_date)} – ${prettyDate(t.end_date)}`,
     initial: (t.destination || t.travel_name || '途').slice(0, 1),
-    can_edit: t.role === 1 || !!t.can_edit,
-    can_bill: t.role === 1 || !!t.can_bill,
+    // 以后端为准（示例/归档已强制只读）
+    can_edit: !!t.can_edit,
+    can_bill: !!t.can_bill,
   }))
 }
 
@@ -57,16 +58,12 @@ Page({
     wx.navigateTo({ url: '/pages/travel/join' })
   },
   openTrip(e) {
-    const { id, mode } = e.currentTarget.dataset
+    const id = e.currentTarget.dataset.id
     const item = (this.data.list || []).find((t) => t.id === Number(id))
-    if (mode === 'edit' && item && !item.can_edit) {
-      wx.showToast({ title: '还没有改行程权限', icon: 'none' })
-      return
-    }
     const name = encodeURIComponent((item && item.travel_name) || '')
     const dest = encodeURIComponent((item && item.destination) || '')
     wx.navigateTo({
-      url: `/pages/travel/home?id=${id}&mode=${mode || 'browse'}&name=${name}&dest=${dest}`,
+      url: `/pages/travel/home?id=${id}&mode=browse&name=${name}&dest=${dest}`,
     })
   },
 })

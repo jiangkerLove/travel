@@ -51,8 +51,8 @@ pub async fn seed(State(state): State<AppState>) -> Result<Json<ApiOk<SeedVo>>, 
         .fetch_optional(&state.pool)
         .await?;
     if exists.is_none() {
-        let start = chrono::Local::now().date_naive();
-        let end = start + chrono::Duration::days(3);
+        let end = chrono::Local::now().date_naive() - chrono::Duration::days(7);
+        let start = end - chrono::Duration::days(3);
         sample::create_sample_travel_with_dates(
             &state.pool,
             ids[0],

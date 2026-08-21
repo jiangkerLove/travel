@@ -1,3 +1,5 @@
 {
-  "navigationBarTitleText": "新建旅途"
+  "navigationBarTitleText": "新建旅途",
+  "navigationBarBackgroundColor": "#F3F6F3",
+  "backgroundColor": "#F3F6F3"
 }

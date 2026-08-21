@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     db::{find_travel, list_members, require_biller, require_member},
     error::{ok, ApiOk, AppError},
-    settle::{calc_transfers, MemberBalance},
+    settle::{calc_group_settle, calc_transfers, MemberBalance},
     state::{AppState, AuthUser},
     util::{dec_from_f64, dec_to_f64, default_cost_of_point, parse_datetime, split_amount, valid_cost_type},
 };
@@ -20,7 +20,10 @@ pub struct SaveReq {
     pub day_plan_id: Option<i64>,
     pub bill_name: String,
     pub amount: f64,
-    pub bill_type: i16,
+    /// 兼容旧客户端；服务端统一按可分摊账单处理
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub bill_type: Option<i16>,
     pub cost_type: String,
     pub pay_user_id: Option<i64>,
     pub consume_time: String,
@@ -159,9 +162,9 @@ pub async fn save(
     if req.amount <= 0.0 {
         return Err(AppError::BadRequest("金额必须大于 0".into()));
     }
-    if req.bill_type != 1 && req.bill_type != 2 {
-        return Err(AppError::BadRequest("账单类型不合法".into()));
-    }
+    // 统一为可分摊账单：可见范围由 visible_all 控制
+    // visible_all=true → 所有人可见；false → 仅分摊成员可见（只选自己=仅自己可见）
+    let bill_type: i16 = 1;
     let mut cost_type = req.cost_type.clone();
     if cost_type.is_empty() {
         cost_type = "other".into();
@@ -186,29 +189,18 @@ pub async fn save(
     let pay_user_id = req.pay_user_id.unwrap_or(user.id);
     require_member(&state.pool, req.travel_id, pay_user_id).await?;
     let consume_time = parse_datetime(&req.consume_time)?;
-    let visible_all = if req.bill_type == 1 {
-        true
-    } else {
-        req.visible_all.unwrap_or(false)
-    };
+    let visible_all = req.visible_all.unwrap_or(true);
 
     let members = list_members(&state.pool, req.travel_id).await?;
-    let share_ids = if req.bill_type == 1 {
-        let ids = req.share_user_ids.clone().unwrap_or_default();
-        let ids = if ids.is_empty() {
-            members.iter().map(|m| m.user_id).collect::<Vec<_>>()
-        } else {
-            ids
-        };
-        for id in &ids {
-            if !members.iter().any(|m| m.user_id == *id) {
-                return Err(AppError::BadRequest("分摊成员必须属于当前旅途".into()));
-            }
+    let mut share_ids = req.share_user_ids.clone().unwrap_or_default();
+    if share_ids.is_empty() {
+        share_ids.push(pay_user_id);
+    }
+    for id in &share_ids {
+        if !members.iter().any(|m| m.user_id == *id) {
+            return Err(AppError::BadRequest("分摊成员必须属于当前旅途".into()));
         }
-        ids
-    } else {
-        vec![]
-    };
+    }
     let parts = split_amount(amount, share_ids.len());
 
     let mut tx = state.pool.begin().await?;
@@ -234,7 +226,7 @@ pub async fn save(
         .bind(day_plan_id)
         .bind(name)
         .bind(amount)
-        .bind(req.bill_type)
+        .bind(bill_type)
         .bind(&cost_type)
         .bind(pay_user_id)
         .bind(consume_time)
@@ -261,7 +253,7 @@ pub async fn save(
         .bind(day_plan_id)
         .bind(name)
         .bind(amount)
-        .bind(req.bill_type)
+        .bind(bill_type)
         .bind(&cost_type)
         .bind(pay_user_id)
         .bind(consume_time)
@@ -298,7 +290,11 @@ async fn fetch_bill(pool: &sqlx::PgPool, id: i64, user_id: i64) -> Result<Option
         JOIN app_user u ON u.id = b.pay_user_id
         LEFT JOIN day_plan p ON p.id = b.day_plan_id
         WHERE b.id = $1 AND (
-            b.bill_type = 1 OR b.pay_user_id = $2 OR b.visible_all = TRUE
+            b.visible_all = TRUE
+            OR b.pay_user_id = $2
+            OR EXISTS (
+                SELECT 1 FROM bill_share s WHERE s.bill_id = b.id AND s.user_id = $2
+            )
         )
         "#,
     )
@@ -324,7 +320,11 @@ pub async fn list(
         JOIN app_user u ON u.id = b.pay_user_id
         LEFT JOIN day_plan p ON p.id = b.day_plan_id
         WHERE b.travel_id = $1 AND (
-            b.bill_type = 1 OR b.pay_user_id = $2 OR b.visible_all = TRUE
+            b.visible_all = TRUE
+            OR b.pay_user_id = $2
+            OR EXISTS (
+                SELECT 1 FROM bill_share s WHERE s.bill_id = b.id AND s.user_id = $2
+            )
         )
         ORDER BY b.consume_time DESC, b.id DESC
         "#,
@@ -386,24 +386,43 @@ pub async fn stat(
             .bind(q.travel_id)
             .fetch_one(&state.pool)
             .await?;
+    // 账单池：所有人可见的账单总额
     let public_total: Decimal = sqlx::query_scalar(
-        "SELECT COALESCE(SUM(amount),0) FROM bill WHERE travel_id=$1 AND bill_type=1",
+        "SELECT COALESCE(SUM(amount),0) FROM bill WHERE travel_id=$1 AND visible_all=TRUE",
     )
     .bind(q.travel_id)
     .fetch_one(&state.pool)
     .await?;
-    let private_total: Decimal = sqlx::query_scalar(
-        "SELECT COALESCE(SUM(amount),0) FROM bill WHERE travel_id=$1 AND bill_type=2 AND pay_user_id=$2",
+    // 我的花销：分摊份额 + 旧版无分摊个人账
+    let my_share: Decimal = sqlx::query_scalar(
+        r#"
+        SELECT COALESCE(SUM(s.share_amount), 0)
+        FROM bill_share s
+        JOIN bill b ON b.id = s.bill_id
+        WHERE b.travel_id = $1 AND s.user_id = $2
+        "#,
     )
     .bind(q.travel_id)
     .bind(user.id)
     .fetch_one(&state.pool)
     .await?;
+    let legacy_private: Decimal = sqlx::query_scalar(
+        r#"
+        SELECT COALESCE(SUM(amount),0) FROM bill
+        WHERE travel_id=$1 AND bill_type=2 AND pay_user_id=$2
+          AND NOT EXISTS (SELECT 1 FROM bill_share s WHERE s.bill_id = bill.id)
+        "#,
+    )
+    .bind(q.travel_id)
+    .bind(user.id)
+    .fetch_one(&state.pool)
+    .await?;
+    let private_total = my_share + legacy_private;
     let cats: Vec<(String, Decimal)> = sqlx::query_as(
         r#"
         SELECT cost_type, COALESCE(SUM(amount),0)
         FROM bill
-        WHERE travel_id=$1 AND bill_type=1
+        WHERE travel_id=$1 AND visible_all=TRUE
         GROUP BY cost_type
         ORDER BY SUM(amount) DESC
         "#,
@@ -480,17 +499,21 @@ pub async fn settle_calc(
                 user_id: m.user_id,
                 nickname: m.nickname.clone(),
                 avatar: m.avatar.clone(),
+                group_name: m.group_name.clone(),
                 paid,
                 owed,
             }
         })
         .collect();
     let (users, transfers) = calc_transfers(&balances);
+    let (groups, group_transfers) = calc_group_settle(&balances);
     Ok(ok(serde_json::json!({
         "is_lock": t.is_lock,
         "is_leader": t.creator_id == user.id,
         "users": users,
         "transfers": transfers,
+        "groups": groups,
+        "group_transfers": group_transfers,
     })))
 }
 

@@ -1,31 +1,104 @@
-<view class="page">
-  <view class="tag-row" style="margin-bottom: 24rpx">
-    <view class="chip {{bill_type === 1 ? 'active' : ''}}" bind:tap="setType" data-v="1">集体账单</view>
-    <view class="chip {{bill_type === 2 ? 'active' : ''}}" bind:tap="setType" data-v="2">个人账单</view>
+<view class="bill-page">
+  <view class="amount-card">
+    <view class="amount-label">金额</view>
+    <view class="amount-row">
+      <text class="yen">¥</text>
+      <input
+        class="amount-input"
+        type="digit"
+        placeholder="0.00"
+        placeholder-class="ph"
+        value="{{amount}}"
+        bindinput="onAmount"
+      />
+    </view>
+    <input
+      class="name-input"
+      placeholder="消费名称，例如 火锅 / 门票"
+      placeholder-class="ph"
+      value="{{bill_name}}"
+      maxlength="40"
+      bindinput="onName"
+    />
   </view>
 
-  <view class="muted" style="margin-bottom: 12rpx">费用类型</view>
-  <view class="tag-row" style="margin-bottom: 24rpx">
-    <view class="chip {{cost_type === item.value ? 'active' : ''}}" wx:for="{{costTypes}}" wx:key="value" bind:tap="setCost" data-v="{{item.value}}">{{item.label}}</view>
+  <view class="sec-label">费用类型</view>
+  <view class="chip-row">
+    <view
+      class="chip {{cost_type === item.value ? 'on' : ''}}"
+      wx:for="{{costTypes}}"
+      wx:key="value"
+      bind:tap="setCost"
+      data-v="{{item.value}}"
+    >{{item.label}}</view>
   </view>
 
-  <t-cell-group theme="card">
-    <t-input label="消费名称" value="{{bill_name}}" bindchange="onName" placeholder="例如 火锅 / 特产 / 超市" />
-    <t-input label="金额" type="digit" value="{{amount}}" bindchange="onAmount" placeholder="0.00" />
+  <view class="form-card">
     <picker mode="date" value="{{consume_date}}" bindchange="onDate">
-      <t-cell title="消费日期" note="{{consume_date}}" arrow />
+      <view class="field-row">
+        <view class="field-k">日期</view>
+        <view class="field-v">{{consume_date}}</view>
+      </view>
     </picker>
-    <t-cell title="付款人" note="{{payName}}" arrow bind:tap="pickPayer" />
-    <t-textarea label="备注" value="{{remark}}" bindchange="onRemark" />
-  </t-cell-group>
+    <view class="field-row" bind:tap="pickPayer">
+      <view class="field-k">付款人</view>
+      <view class="field-v">{{payName || '选择'}}</view>
+    </view>
+    <view class="field last">
+      <view class="field-k">备注 <text class="opt">选填</text></view>
+      <textarea
+        class="area"
+        placeholder="补充说明"
+        placeholder-class="ph"
+        value="{{remark}}"
+        maxlength="120"
+        auto-height
+        bindinput="onRemark"
+      />
+    </view>
+  </view>
 
-  <view class="card">
-    <view class="title">关联行程（可选）</view>
-    <view class="muted" style="margin: 8rpx 0 16rpx">购物、小费等不必绑定；从行程点进来会自动带上</view>
-    <view class="tag-row">
-      <view class="chip {{!day_plan_id ? 'active' : ''}}" bind:tap="clearPlan">不绑定</view>
+  <view class="form-card">
+    <view class="sec-head">
+      <view class="sec-title">谁能看见</view>
+    </view>
+    <view class="chip-row tight">
+      <view class="chip {{visible_all ? 'on' : ''}}" bind:tap="setVisible" data-v="1">所有人可见</view>
+      <view class="chip {{!visible_all ? 'on' : ''}}" bind:tap="setVisible" data-v="0">仅分摊成员</view>
+    </view>
+    <view class="muted">只选自己分摊时，选「仅分摊成员」就只有自己能看</view>
+  </view>
+
+  <view class="form-card">
+    <view class="sec-head">
+      <view class="sec-title">分摊成员</view>
+      <view class="sec-act" bind:tap="toggleAllShare">{{allShared ? '取消全选' : '全选'}}</view>
+    </view>
+    <view class="muted">平均分摊 · 可只勾自己</view>
+    <view class="share-grid">
       <view
-        class="chip {{day_plan_id === item.id ? 'active' : ''}}"
+        class="share-chip {{item.checked ? 'on' : ''}}"
+        wx:for="{{members}}"
+        wx:key="user_id"
+        bind:tap="toggleShare"
+        data-id="{{item.user_id}}"
+      >
+        <text>{{item.nickname}}</text>
+        <text class="share-g" wx:if="{{item.group_name}}">{{item.group_name}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="form-card">
+    <view class="sec-head">
+      <view class="sec-title">挂到行程点</view>
+      <view class="opt">可选</view>
+    </view>
+    <view class="muted">记下这笔钱花在哪个景点/住宿，方便对照行程；超市购物等可不选</view>
+    <view class="chip-row tight">
+      <view class="chip {{!day_plan_id ? 'on' : ''}}" bind:tap="clearPlan">不挂靠</view>
+      <view
+        class="chip {{day_plan_id === item.id ? 'on' : ''}}"
         wx:for="{{plans}}"
         wx:key="id"
         bind:tap="setPlan"
@@ -34,34 +107,10 @@
     </view>
   </view>
 
-  <view class="card" wx:if="{{bill_type === 2}}">
-    <view class="row space-between">
-      <view>
-        <view class="title">团员可见</view>
-        <view class="muted">关闭后仅自己能看到这笔个人账单</view>
-      </view>
-      <t-switch value="{{visible_all}}" bindchange="onVisible" />
-    </view>
-  </view>
+  <view class="bottom-space"></view>
 
-  <view class="card" wx:if="{{bill_type === 1}}">
-    <view class="title" style="margin-bottom: 16rpx">分摊成员（平均）</view>
-    <view class="tag-row">
-      <view
-        class="chip {{item.checked ? 'active' : ''}}"
-        wx:for="{{members}}"
-        wx:key="user_id"
-        bind:tap="toggleShare"
-        data-id="{{item.user_id}}"
-      >{{item.nickname}}</view>
-    </view>
-    <view class="muted" style="margin-top: 12rpx">不选则默认全员分摊</view>
-  </view>
-
-  <view style="margin-top: 32rpx">
-    <t-button theme="primary" size="large" block bind:tap="submit">保存账单</t-button>
-  </view>
-  <view style="margin-top: 16rpx" wx:if="{{id}}">
-    <t-button theme="danger" variant="outline" block bind:tap="remove">删除</t-button>
+  <view class="bottom-bar">
+    <view class="bar-btn ghost" wx:if="{{id}}" bind:tap="remove">删除</view>
+    <view class="bar-btn main" bind:tap="submit">保存账单</view>
   </view>
 </view>

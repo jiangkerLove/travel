@@ -20,7 +20,7 @@ Page({
       }
       wx.reLaunch({ url: '/pages/index/index' })
     } catch (e) {
-      const message = (e && e.message) || '微信登录失败，请确认后端已启动'
+      const message = (e && e.message) || '暂时进不去，请确认服务已启动'
       this.setData({ fail: true, message })
     } finally {
       this._entering = false

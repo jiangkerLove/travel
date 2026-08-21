@@ -15,6 +15,27 @@ const {
 } = require('../../utils/constants')
 const { fillLineRoutes } = require('../../utils/direction')
 
+function todayStr() {
+  const d = new Date()
+  const m = `${d.getMonth() + 1}`.padStart(2, '0')
+  const day = `${d.getDate()}`.padStart(2, '0')
+  return `${d.getFullYear()}-${m}-${day}`
+}
+
+/** 浏览态默认：行程期内看今天，否则看全程 */
+function pickBrowseScope(days, trip) {
+  const list = days || []
+  const today = todayStr()
+  const start = (trip && trip.start_date) || (list[0] && list[0].date) || ''
+  const end = (trip && trip.end_date) || (list[list.length - 1] && list[list.length - 1].date) || ''
+  if (start && end && (today < start || today > end)) {
+    return { mapScope: 'all', dayIndex: -1 }
+  }
+  const idx = list.findIndex((d) => d.date === today)
+  if (idx >= 0) return { mapScope: 'day', dayIndex: idx }
+  return { mapScope: 'all', dayIndex: -1 }
+}
+
 function decoratePlans(plans, startHint, showRoute) {
   const list = (plans || []).map((p) => ({
     ...p,
@@ -35,6 +56,39 @@ function decoratePlans(plans, startHint, showRoute) {
   })
 }
 
+function buildMemberGroups(members) {
+  const namedOrder = []
+  const namedMap = new Map()
+  const solos = []
+  for (const m of members) {
+    const name = (m.group_name || '').trim()
+    if (name) {
+      if (!namedMap.has(name)) {
+        namedMap.set(name, [])
+        namedOrder.push(name)
+      }
+      namedMap.get(name).push(m)
+    } else {
+      solos.push(m)
+    }
+  }
+  const groups = namedOrder.map((name) => ({
+    key: `g:${name}`,
+    title: name,
+    isGroup: true,
+    members: namedMap.get(name),
+  }))
+  if (solos.length) {
+    groups.push({
+      key: 'solos',
+      title: '各自单独结算',
+      isGroup: false,
+      members: solos,
+    })
+  }
+  return groups
+}
+
 Page({
   data: {
     id: 0,
@@ -48,8 +102,14 @@ Page({
     pointTypes: POINT_TYPES,
     trafficTypes: TRAFFIC_TYPES,
     bills: [],
+    billScope: '全程',
+    billView: 'pool',
+    billListTitle: '账单池明细',
+    billEmptyTitle: '还没有账单',
+    billEmptySub: '右下角加号记一笔餐饮或购物',
     stat: {},
     members: [],
+    memberGroups: [],
     mapLat: 30.67,
     mapLng: 104.06,
     markers: [],
@@ -57,6 +117,7 @@ Page({
     dragIndex: -1,
     canEdit: false,
     canBill: false,
+    isCreator: false,
     routesReady: false,
     generating: false,
   },
@@ -67,7 +128,8 @@ Page({
     const dest = q.dest ? decodeURIComponent(q.dest) : ''
     this._mapInited = false
     this._mapSeq = 0
-    // 进页立刻定标题，避免先闪全局「结伴出行」
+    this._dayScopeInited = false
+    // 进页立刻定标题，避免先闪全局「旅途计划」
     wx.setNavigationBarTitle({
       title: mode === 'edit' ? '排行程' : (name || '旅途'),
     })
@@ -76,7 +138,8 @@ Page({
       mode,
       tab: 'plan',
       routesReady: mode !== 'edit',
-      mapScope: 'day',
+      mapScope: mode === 'edit' ? 'day' : 'all',
+      dayIndex: mode === 'edit' ? 0 : -1,
       // 先用列表带来的名字占位，防止整页空白再闪
       trip: id
         ? {
@@ -98,6 +161,12 @@ Page({
       this._plansLoaded = false
       this._mapDrawKey = ''
     }
+    // 从记账页返回：立刻刷新账单
+    if (this._billsDirty) {
+      this._billsDirty = false
+      if (this.data.tab === 'bill') this.loadBills()
+      else this._billsStale = true
+    }
     // 已加载过就不要整页重刷，否则地图/列表会一直闪
     if (this._plansLoaded && this.data.days && this.data.days.length) {
       return
@@ -110,8 +179,28 @@ Page({
     if (tab === 'plan') {
       if (!this._plansLoaded) this.loadPlans()
       else this.renderMap({ fit: false })
-    } else if (tab === 'bill') this.loadBills()
-    else if (tab === 'member') this.loadMembers()
+    } else if (tab === 'bill') {
+      if (this._billsStale || !this._allBills) {
+        this._billsStale = false
+        this.loadBills()
+      } else {
+        this.applyBillFilter()
+      }
+    } else if (tab === 'member') this.loadMembers()
+  },
+  enterEdit() {
+    if (!this.data.canEdit) {
+      wx.showToast({ title: '没有改行程权限', icon: 'none' })
+      return
+    }
+    wx.setNavigationBarTitle({ title: '排行程' })
+    this.setData({ mode: 'edit', tab: 'plan' })
+    if (this.data.mapScope === 'all') {
+      const dayIndex = Math.max(this.data.dayIndex, 0)
+      const day = this.data.days[dayIndex] || { plans: [] }
+      this.setData({ mapScope: 'day', dayIndex, currentDay: day })
+      this.renderMap({ fit: true })
+    }
   },
   async refresh() {
     const id = this.data.id
@@ -132,7 +221,12 @@ Page({
     const title = this.data.mode === 'edit' ? '排行程' : (trip.travel_name || '旅途')
     wx.setNavigationBarTitle({ title })
     this.applyTrip(trip)
-    this.setData({ canEdit, canBill })
+    const user = getApp().globalData.user || wx.getStorageSync('user') || {}
+    this.setData({
+      canEdit,
+      canBill,
+      isCreator: Number(trip.creator_id) === Number(user.id),
+    })
     if (this.data.tab === 'plan' || this.data.mode === 'edit') await this.loadPlans()
     if (this.data.tab === 'bill') await this.loadBills()
     if (this.data.tab === 'member') await this.loadMembers()
@@ -154,6 +248,7 @@ Page({
       'trip.remark': trip.remark,
       'trip.can_edit': trip.can_edit,
       'trip.can_bill': trip.can_bill,
+      'trip.creator_id': trip.creator_id,
     })
   },
   async loadPlans({ withRoutes } = {}) {
@@ -173,8 +268,20 @@ Page({
       }
     })
     let dayIndex = this.data.dayIndex
-    if (this.data.mapScope !== 'all' && (dayIndex < 0 || dayIndex >= days.length)) dayIndex = 0
-    const scope = this.data.mapScope
+    let scope = this.data.mapScope
+    if (!this._dayScopeInited) {
+      this._dayScopeInited = true
+      if (this.data.mode === 'browse') {
+        const picked = pickBrowseScope(days, this.data.trip)
+        scope = picked.mapScope
+        dayIndex = picked.dayIndex
+      } else if (dayIndex < 0 || dayIndex >= days.length) {
+        dayIndex = 0
+        scope = 'day'
+      }
+    } else if (scope !== 'all' && (dayIndex < 0 || dayIndex >= days.length)) {
+      dayIndex = 0
+    }
     const idsKey = days.map((d) => `${d.day_num}:${(d.plans || []).map((p) => p.id).join(',')}`).join('|')
     const plansChanged = idsKey !== this._plansIdsKey
     this._plansIdsKey = idsKey
@@ -185,6 +292,7 @@ Page({
 
     this.setData({
       days,
+      mapScope: scope,
       dayIndex: scope === 'all' ? -1 : dayIndex,
       currentDay: days[scope === 'all' ? Math.max(dayIndex, 0) : dayIndex] || { plans: [] },
       routesReady: showRoute,
@@ -196,6 +304,7 @@ Page({
     if (this.data.mapScope === 'all') return
     this.setData({ mapScope: 'all', dayIndex: -1 })
     this.renderMap({ fit: true })
+    if (this.data.tab === 'bill') this.applyBillFilter()
   },
   switchDay(e) {
     const dayIndex = Number(e.currentTarget.dataset.index)
@@ -203,6 +312,7 @@ Page({
     const day = this.data.days[dayIndex] || { plans: [] }
     this.setData({ mapScope: 'day', dayIndex, currentDay: day })
     this.renderMap({ fit: true })
+    if (this.data.tab === 'bill') this.applyBillFilter()
   },
   fitMap(points) {
     const withGeo = (points || []).filter((p) => p.latitude && p.longitude)
@@ -219,7 +329,7 @@ Page({
       const ctx = wx.createMapContext('dayMap', this)
       if (!ctx || !ctx.includePoints) return
       ctx.includePoints({
-        padding: [100, 80, 80, 80],
+        padding: [52, 40, 40, 40],
         points: fitPointsForMap(withGeo),
       })
       this._mapFitted = true
@@ -244,7 +354,7 @@ Page({
       if (!markStart && localPlans.length) markStart = true
     }
     const localGeo = localPlans.filter((p) => p.latitude && p.longitude)
-    const cacheKey = `spread1:${scope}:${scope === 'all' ? 'all' : (day && day.day_num)}:${withLines ? 1 : 0}:${localPlans.map((p) => p.id).join(',')}`
+    const cacheKey = `spread3:${scope}:${scope === 'all' ? 'all' : (day && day.day_num)}:${withLines ? 1 : 0}:${localPlans.map((p) => p.id).join(',')}`
 
     if (!localGeo.length) {
       if (this.data.markers.length || this.data.polyline.length) {
@@ -267,7 +377,7 @@ Page({
     }
 
     if (!withLines) {
-      const markers = toMarkers(localGeo, { markStart })
+      const markers = toMarkers(localGeo, { markStart, hideLegs: true })
       const nextKey = `${markers.map((m) => `${m.id}:${m.latitude},${m.longitude}`).join('|')}#0`
       if (nextKey !== this._mapDrawKey) {
         this._mapDrawKey = nextKey
@@ -307,12 +417,12 @@ Page({
         const filled = fillLineRoutes(data.lines || [], points)
         lines = filled.lines
       }
-      const markers = toMarkers(points, { markStart })
+      const markers = toMarkers(points, { markStart, lines })
       const polyline = linesToPolyline(lines, points)
       this._mapCache = { key: cacheKey, markers, polyline, points }
       if (seq !== this._mapSeq) return
       // 内容没变就别再 setData，否则原生 map 会反复重绘闪烁
-      const nextKey = `${markers.map((m) => `${m.id}:${m.latitude},${m.longitude}`).join('|')}#${polyline.length}`
+      const nextKey = `${markers.map((m) => `${m.id}:${m.latitude},${m.longitude}:${(m.callout && m.callout.content) || ''}`).join('|')}#${polyline.length}`
       if (nextKey !== this._mapDrawKey) {
         this._mapDrawKey = nextKey
         this.setData({ markers, polyline })
@@ -321,22 +431,41 @@ Page({
     } catch (e) {
       if (seq !== this._mapSeq) return
       this.setData({
-        markers: toMarkers(localGeo, { markStart }),
+        markers: toMarkers(localGeo, { markStart, hideLegs: true }),
         polyline: [],
       })
       if (fit) this.fitMap(localGeo)
     }
   },
-  openFormAdd(via) {
+  openFormAdd() {
     const days = this.data.days || []
     let dayNum = (this.data.currentDay && this.data.currentDay.day_num) || 1
     if (this.data.mapScope === 'all') {
       dayNum = (days[0] && days[0].day_num) || 1
     }
-    const extra = via ? '&via=1' : ''
+    this.openPlanEdit({ day_num: dayNum })
+  },
+  openPlanEdit({ day_num, id, plan } = {}) {
+    if (!this.data.canEdit) {
+      wx.showToast({ title: '没有改行程权限', icon: 'none' })
+      return
+    }
     this._dirtyAfterEdit = true
+    const tid = this.data.id
+    let url = `/pages/plan/edit?travel_id=${tid}`
+    if (id) url += `&id=${id}`
+    if (day_num) url += `&day_num=${day_num}`
+    const allPlans = (this.data.days || []).flatMap((d) => d.plans || [])
+    const planData = plan || (id ? allPlans.find((p) => p.id === Number(id)) : null)
     wx.navigateTo({
-      url: `/pages/plan/edit?travel_id=${this.data.id}&day_num=${dayNum}${extra}`,
+      url,
+      success: (res) => {
+        res.eventChannel.emit('init', {
+          trip: this.data.trip,
+          days: this.data.days || [],
+          plan: planData || null,
+        })
+      },
     })
   },
   quickAddEnd() {
@@ -353,32 +482,18 @@ Page({
           const day = this.data.days[r.tapIndex]
           if (!day) return
           this.setData({ mapScope: 'day', dayIndex: r.tapIndex, currentDay: day })
-          this.openFormAdd(false)
+          this.openFormAdd()
         },
       })
       return
     }
-    const hasPlans = !!(this.data.currentDay.plans || []).length
-    if (!hasPlans) {
-      this.openFormAdd(false)
-      return
-    }
-    wx.showActionSheet({
-      itemList: ['添加地点', '添加途经点'],
-      success: (r) => {
-        if (r.tapIndex === 0) this.openFormAdd(false)
-        if (r.tapIndex === 1) this.openFormAdd(true)
-      },
-    })
+    this.openFormAdd()
   },
   editPlan(e) {
     if (this._justDragged) return
     const id = e.currentTarget.dataset.id
     if (this.data.mode === 'edit' && this.data.canEdit) {
-      this._dirtyAfterEdit = true
-      wx.navigateTo({
-        url: `/pages/plan/edit?travel_id=${this.data.id}&id=${id}`,
-      })
+      this.openPlanEdit({ id })
       return
     }
     const all = (this.data.days || []).flatMap((d) => d.plans || [])
@@ -406,8 +521,7 @@ Page({
       itemList: items,
       success: async (r) => {
         if (r.tapIndex === 0) {
-          this._dirtyAfterEdit = true
-          wx.navigateTo({ url: `/pages/plan/edit?travel_id=${this.data.id}&id=${id}` })
+          this.openPlanEdit({ id, plan })
           return
         }
         if (items[r.tapIndex] === '移到其他天…') {
@@ -563,37 +677,340 @@ Page({
     const p = all.find((i) => i.id === e.detail.markerId)
     if (!p) return
     if (this.data.mode === 'edit' && this.data.canEdit) {
-      this._dirtyAfterEdit = true
-      wx.navigateTo({ url: `/pages/plan/edit?travel_id=${this.data.id}&id=${p.id}` })
+      this.openPlanEdit({ id: p.id, plan: p })
       return
     }
     openMap(p)
   },
   async loadBills() {
-    const [bills, stat] = await Promise.all([api.billList(this.data.id), api.statTotal(this.data.id)])
-    stat.categories = (stat.categories || []).map((c) => ({ ...c, label: costLabel(c.cost_type) }))
-    this.setData({ bills: bills || [], stat })
+    const [bills, stat, members] = await Promise.all([
+      api.billList(this.data.id),
+      api.statTotal(this.data.id),
+      this.data.members && this.data.members.length
+        ? Promise.resolve(this.data.members)
+        : api.travelMember(this.data.id),
+    ])
+    const user = getApp().globalData.user || wx.getStorageSync('user') || {}
+    if (members && (!this.data.members || !this.data.members.length)) {
+      const mapped = (members || []).map((m) => ({
+        ...m,
+        nickLetter: (m.nickname || '?').slice(0, 1),
+      }))
+      this.setData({ members: mapped, memberGroups: buildMemberGroups(mapped) })
+    }
+    this._allBills = (bills || []).map((b) => {
+      const shareCount = (b.shares || []).length
+      let share_hint = ''
+      if (shareCount > 1) share_hint = `${shareCount}人分摊`
+      else if (shareCount === 1) share_hint = '个人'
+      else if (b.bill_type === 2) share_hint = '个人'
+      return {
+        ...b,
+        cost_type_label: costLabel(b.cost_type),
+        consume_date: (b.consume_time || '').slice(0, 10),
+        share_hint,
+      }
+    })
+    this._tripStat = {
+      ...stat,
+      member_count: stat.member_count || 1,
+      categories: (stat.categories || []).map((c) => ({ ...c, label: costLabel(c.cost_type) })),
+    }
+    this._billUserId = Number(user.id) || 0
+    this.applyBillFilter()
+  },
+  applyBillFilter() {
+    const all = this._allBills || []
+    const tripStat = this._tripStat || {}
+    const userId = Number(this._billUserId) || 0
+    const billView = this.data.billView || 'pool'
+    let scoped = all
+    let billScope = '全程'
+    let date = ''
+
+    if (this.data.mapScope === 'day') {
+      const day = (this.data.days || [])[this.data.dayIndex] || this.data.currentDay || {}
+      date = day.date || ''
+      if (date) {
+        scoped = all.filter((b) => b.consume_date === date)
+        billScope = `D${day.day_num || ''}`
+      }
+    }
+
+    const round2 = (n) => Math.round(n * 100) / 100
+    const myCostOf = (b) => {
+      if (b.shares && b.shares.length) {
+        const share = b.shares.find((s) => Number(s.user_id) === userId)
+        return share ? Number(share.share_amount) || 0 : 0
+      }
+      if (b.bill_type === 2 && Number(b.pay_user_id) === userId) return Number(b.amount) || 0
+      return 0
+    }
+    const iAmIn = (b) => {
+      if (b.shares && b.shares.length) {
+        return b.shares.some((s) => Number(s.user_id) === userId)
+      }
+      return b.bill_type === 2 && Number(b.pay_user_id) === userId
+    }
+
+    let stat = tripStat
+    if (date) {
+      let public_total = 0
+      let private_total = 0
+      const catMap = {}
+      for (const b of scoped) {
+        const amount = Number(b.amount) || 0
+        if (b.visible_all) {
+          public_total += amount
+          catMap[b.cost_type] = (catMap[b.cost_type] || 0) + amount
+        }
+        private_total += myCostOf(b)
+      }
+      const mc = tripStat.member_count || 1
+      stat = {
+        public_total: round2(public_total),
+        private_total: round2(private_total),
+        avg_public: round2(public_total / mc),
+        member_count: mc,
+        categories: Object.keys(catMap).map((cost_type) => ({
+          cost_type,
+          amount: round2(catMap[cost_type]),
+          label: costLabel(cost_type),
+        })),
+      }
+    }
+
+    let bills = []
+    if (billView === 'mine') {
+      bills = scoped.filter(iAmIn).map((b) => {
+        const mine = round2(myCostOf(b))
+        const showWhole = (b.shares || []).length > 1 && mine !== Number(b.amount)
+        return {
+          ...b,
+          display_amount: mine,
+          display_sub: showWhole ? `整笔 ¥${b.amount}` : '',
+        }
+      })
+    } else {
+      bills = scoped
+        .filter((b) => !!b.visible_all)
+        .map((b) => ({
+          ...b,
+          display_amount: b.amount,
+          display_sub: '',
+        }))
+    }
+
+    const dayBit = billScope && billScope !== '全程' ? ` · ${billScope}` : ''
+    const billListTitle = billView === 'mine' ? `我的花销${dayBit}` : `账单池${dayBit}`
+    let billEmptyTitle = '还没有账单'
+    let billEmptySub = '右下角加号记一笔餐饮或购物'
+    if (billView === 'mine') {
+      billEmptyTitle = date ? '这天没有你的花销' : '还没有你的花销'
+      billEmptySub = '记一笔并勾选自己分摊即可'
+    } else if (date) {
+      billEmptyTitle = '这天还没有公开账单'
+    }
+
+    this.setData({ bills, stat, billScope, billListTitle, billEmptyTitle, billEmptySub })
+  },
+  setBillView(e) {
+    const billView = e.currentTarget.dataset.v
+    if (!billView || billView === this.data.billView) return
+    this.setData({ billView })
+    this.applyBillFilter()
   },
   addBill() {
     if (!this.data.canBill) {
       wx.showToast({ title: '没有记账权限', icon: 'none' })
       return
     }
-    wx.navigateTo({ url: `/pages/bill/edit?travel_id=${this.data.id}` })
+    let url = `/pages/bill/edit?travel_id=${this.data.id}`
+    if (this.data.mapScope === 'day') {
+      const day = (this.data.days || [])[this.data.dayIndex]
+      if (day && day.date) url += `&consume_date=${day.date}`
+    }
+    this._billsDirty = true
+    wx.navigateTo({
+      url,
+      success: (res) => {
+        res.eventChannel.emit('init', {
+          trip: this.data.trip,
+          days: this.data.days || [],
+          members: this.data.members || [],
+          bills: this._allBills || [],
+        })
+      },
+    })
   },
   editBill(e) {
     if (!this.data.canBill) return
-    wx.navigateTo({ url: `/pages/bill/edit?travel_id=${this.data.id}&id=${e.currentTarget.dataset.id}` })
+    this._billsDirty = true
+    const id = e.currentTarget.dataset.id
+    const bill = (this._allBills || []).find((b) => b.id === Number(id))
+    wx.navigateTo({
+      url: `/pages/bill/edit?travel_id=${this.data.id}&id=${id}`,
+      success: (res) => {
+        res.eventChannel.emit('init', {
+          trip: this.data.trip,
+          days: this.data.days || [],
+          members: this.data.members || [],
+          bills: this._allBills || [],
+          bill: bill || null,
+        })
+      },
+    })
   },
   goSettle() {
     wx.navigateTo({ url: `/pages/settle/settle?travel_id=${this.data.id}` })
   },
   async loadMembers() {
-    const members = await api.travelMember(this.data.id)
-    this.setData({ members: members || [] })
+    const members = (await api.travelMember(this.data.id) || []).map((m) => ({
+      ...m,
+      nickLetter: (m.nickname || '?').slice(0, 1),
+    }))
+    this.setData({
+      members,
+      memberGroups: buildMemberGroups(members),
+    })
+  },
+  onMemberTap(e) {
+    const id = Number(e.currentTarget.dataset.id)
+    const m = (this.data.members || []).find((i) => i.user_id === id)
+    if (!m) return
+    const trip = this.data.trip || {}
+    const isLeader = !trip.is_sample && trip.status !== 2 && trip.role === 1
+    if (!isLeader) {
+      wx.showToast({
+        title: m.group_name ? `${m.nickname} · ${m.group_name}` : `${m.nickname} · 单独结算`,
+        icon: 'none',
+      })
+      return
+    }
+
+    const actions = []
+    const handlers = []
+    actions.push(m.group_name ? '改团体' : '加入团体')
+    handlers.push(() => this.editGroup({ currentTarget: { dataset: { id } } }))
+    if (m.role !== 1 && !m.is_guest) {
+      actions.push(m.can_edit ? '取消改行程' : '允许改行程')
+      handlers.push(() => this.togglePerm({ currentTarget: { dataset: { id, k: 'can_edit' } } }))
+      actions.push(m.can_bill ? '取消记账' : '允许记账')
+      handlers.push(() => this.togglePerm({ currentTarget: { dataset: { id, k: 'can_bill' } } }))
+    }
+    if (m.role !== 1) {
+      actions.push('移除成员')
+      handlers.push(() => this.removeMember({ currentTarget: { dataset: { id } } }))
+    }
+    if (!actions.length) return
+    wx.showActionSheet({
+      itemList: actions,
+      success: (r) => {
+        const fn = handlers[r.tapIndex]
+        if (!fn) return
+        // 连续 ActionSheet 需错开一帧，否则会被系统吃掉
+        setTimeout(fn, 50)
+      },
+    })
   },
   copyCode() {
     wx.setClipboardData({ data: this.data.trip.invite_code })
+  },
+  addCompanion() {
+    if (this.data.trip.role !== 1) return
+    wx.showModal({
+      title: '添加随行成员',
+      editable: true,
+      placeholderText: '昵称，如 小朋友',
+      success: async (r) => {
+        if (!r.confirm) return
+        const nickname = (r.content || '').trim()
+        if (!nickname) {
+          wx.showToast({ title: '请填写昵称', icon: 'none' })
+          return
+        }
+        const groups = [...new Set((this.data.members || []).map((m) => m.group_name).filter(Boolean))]
+        let group_name = ''
+        if (groups.length) {
+          const pick = await new Promise((resolve) => {
+            wx.showActionSheet({
+              itemList: groups.concat(['新建团体', '各自单独结算']),
+              success: (a) => resolve(a.tapIndex),
+              fail: () => resolve(-1),
+            })
+          })
+          if (pick < 0) return
+          if (pick < groups.length) group_name = groups[pick]
+          else if (pick === groups.length) {
+            const g = await new Promise((resolve) => {
+              wx.showModal({
+                title: '团体名称',
+                editable: true,
+                placeholderText: '如 我这边',
+                success: (x) => resolve(x.confirm ? (x.content || '').trim() : ''),
+              })
+            })
+            if (!g) {
+              wx.showToast({ title: '未填写团体', icon: 'none' })
+              return
+            }
+            group_name = g
+          }
+        } else {
+          const g = await new Promise((resolve) => {
+            wx.showModal({
+              title: '归入哪个团体？',
+              editable: true,
+              placeholderText: '如 我这边（可留空）',
+              success: (x) => resolve(x.confirm ? (x.content || '').trim() : null),
+            })
+          })
+          if (g === null) return
+          group_name = g
+        }
+        await api.travelCompanion({
+          travel_id: this.data.id,
+          nickname,
+          group_name: group_name || undefined,
+        })
+        this.loadMembers()
+      },
+    })
+  },
+  editGroup(e) {
+    if (this.data.trip.role !== 1) return
+    const id = Number(e.currentTarget.dataset.id)
+    const m = (this.data.members || []).find((i) => i.user_id === id)
+    if (!m) return
+    const groups = [...new Set((this.data.members || []).map((x) => x.group_name).filter(Boolean))]
+    const extras = ['新建团体', '改为单独结算']
+    wx.showActionSheet({
+      itemList: groups.concat(extras),
+      success: async (r) => {
+        let group_name = null
+        if (r.tapIndex < groups.length) group_name = groups[r.tapIndex]
+        else if (r.tapIndex === groups.length) {
+          const g = await new Promise((resolve) => {
+            wx.showModal({
+              title: '团体名称',
+              editable: true,
+              placeholderText: '如 朋友这边',
+              success: (x) => resolve(x.confirm ? (x.content || '').trim() : ''),
+            })
+          })
+          if (!g) return
+          group_name = g
+        } else {
+          group_name = ''
+        }
+        await api.travelGroup({
+          travel_id: this.data.id,
+          user_id: id,
+          group_name,
+        })
+        this.loadMembers()
+      },
+    })
   },
   async togglePerm(e) {
     if (this.data.trip.role !== 1) return
@@ -622,8 +1039,16 @@ Page({
     this.refresh()
   },
   async archive() {
+    if (!this.data.isCreator) {
+      wx.showToast({ title: '仅创建人可归档', icon: 'none' })
+      return
+    }
     const ok = await new Promise((resolve) => {
-      wx.showModal({ title: '归档', content: '归档后将移入历史旅途', success: (r) => resolve(r.confirm) })
+      wx.showModal({
+        title: '归档旅途',
+        content: '归档后不可再改行程和账单，将移入历史旅途，并可查看智能分账。确定归档？',
+        success: (r) => resolve(r.confirm),
+      })
     })
     if (!ok) return
     await api.travelArchive(this.data.id)

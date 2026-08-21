@@ -1,0 +1,66 @@
+page {
+  background: #f3f6f3;
+}
+
+.about-page {
+  min-height: 100vh;
+  padding: 64rpx 40rpx 80rpx;
+  box-sizing: border-box;
+  background:
+    radial-gradient(ellipse 80% 45% at 50% -10%, rgba(111, 155, 136, 0.16), transparent 55%),
+    #f3f6f3;
+}
+
+.mark {
+  width: 120rpx;
+  height: 120rpx;
+  display: block;
+  margin: 0 auto;
+  border-radius: 28rpx;
+}
+
+.name {
+  margin-top: 24rpx;
+  text-align: center;
+  font-size: 40rpx;
+  font-weight: 650;
+  color: #2f3d36;
+  letter-spacing: 2rpx;
+}
+
+.ver {
+  margin-top: 10rpx;
+  text-align: center;
+  font-size: 24rpx;
+  color: #9aa89f;
+}
+
+.card {
+  margin-top: 48rpx;
+  background: #fff;
+  border-radius: 24rpx;
+  padding: 36rpx 32rpx;
+  box-shadow: 0 8rpx 24rpx rgba(80, 110, 96, 0.04);
+}
+
+.p {
+  font-size: 28rpx;
+  color: #4f6f62;
+  line-height: 1.75;
+}
+
+.p + .p {
+  margin-top: 24rpx;
+}
+
+.meta {
+  margin-top: 48rpx;
+  text-align: center;
+  font-size: 22rpx;
+  color: #9aa89f;
+  line-height: 1.7;
+}
+
+.copy {
+  margin-top: 16rpx;
+}

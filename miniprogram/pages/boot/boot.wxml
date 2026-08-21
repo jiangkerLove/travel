@@ -1,7 +1,7 @@
 <view class="boot">
-  <view class="logo">结</view>
-  <view class="h1">结伴出行</view>
-  <view wx:if="{{!fail}}" class="sub">正在登录…</view>
+  <image class="mark" src="/images/brand-mark.png" mode="aspectFit" />
+  <view class="brand">旅途计划</view>
+  <view wx:if="{{!fail}}" class="sub">正在进入…</view>
   <block wx:else>
     <view class="err">{{message}}</view>
     <view class="retry" bind:tap="retry">重试</view>

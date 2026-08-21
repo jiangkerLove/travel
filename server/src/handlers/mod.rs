@@ -31,6 +31,8 @@ pub fn router(state: AppState) -> Router {
         .route("/api/travel/archive", post(travel::archive))
         .route("/api/travel/remove", post(travel::remove))
         .route("/api/travel/perm", post(travel::set_perm))
+        .route("/api/travel/companion", post(travel::add_companion))
+        .route("/api/travel/group", post(travel::set_group))
         .route("/api/plan/save", post(plan::save))
         .route("/api/plan/list", get(plan::list))
         .route("/api/plan/del", delete(plan::del).post(plan::del))

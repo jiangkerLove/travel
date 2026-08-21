@@ -16,6 +16,8 @@ const api = {
   travelArchive: (travel_id) => request({ url: '/api/travel/archive', method: 'POST', data: { travel_id } }),
   travelRemove: (data) => request({ url: '/api/travel/remove', method: 'POST', data }),
   travelPerm: (data) => request({ url: '/api/travel/perm', method: 'POST', data }),
+  travelCompanion: (data) => request({ url: '/api/travel/companion', method: 'POST', data }),
+  travelGroup: (data) => request({ url: '/api/travel/group', method: 'POST', data }),
 
   planList: (travel_id, day_num, routes = true) => {
     let url = `/api/plan/list?travel_id=${travel_id}`

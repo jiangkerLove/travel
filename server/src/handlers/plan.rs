@@ -363,7 +363,7 @@ pub async fn save(
             .await?
             .ok_or_else(|| AppError::BadRequest("插入位置不存在".into()))?;
             if after.day_num != req.day_num {
-                return Err(AppError::BadRequest("途经点只能插在同一天".into()));
+                return Err(AppError::BadRequest("只能插在同一天".into()));
             }
             sqlx::query(
                 "UPDATE day_plan SET sort = sort + 1 WHERE travel_id=$1 AND day_num=$2 AND sort > $3",

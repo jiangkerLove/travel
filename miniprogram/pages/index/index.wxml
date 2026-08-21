@@ -1,6 +1,6 @@
 <view class="home-page">
   <view class="hero">
-    <view class="brand">结伴出行</view>
+    <view class="brand">旅途计划</view>
     <view class="lead">一起把路线排好，慢慢走</view>
     <view class="hero-actions">
       <view class="soft-btn main" bind:tap="goCreate">新建旅途</view>
@@ -16,7 +16,13 @@
       <view class="empty-sub">先建一个，或者用邀请码加入同伴</view>
     </view>
 
-    <view class="trip" wx:for="{{list}}" wx:key="id">
+    <view
+      class="trip tapable"
+      wx:for="{{list}}"
+      wx:key="id"
+      bind:tap="openTrip"
+      data-id="{{item.id}}"
+    >
       <view class="trip-top">
         <view class="thumb">{{item.initial}}</view>
         <view class="trip-main">
@@ -29,7 +35,6 @@
           </view>
           <view class="trip-place">{{item.destination}}</view>
           <view class="trip-date">{{item.rangeText}}</view>
-          <view class="trip-hint" wx:if="{{item.is_sample}}">只读示例，可看行程和分账；新建旅途后不再显示</view>
         </view>
       </view>
       <view class="trip-meta">
@@ -38,23 +43,6 @@
         <text>{{item.day_count}} 天</text>
         <text class="dot">·</text>
         <text>{{item.role === 1 ? '你是团长' : '你是成员'}}</text>
-      </view>
-      <view class="trip-split">
-        <view
-          class="split-item {{item.can_edit ? '' : 'off'}}"
-          hover-class="split-item-hover"
-          catch:tap="openTrip"
-          data-id="{{item.id}}"
-          data-mode="edit"
-        >排路线</view>
-        <view class="split-line"></view>
-        <view
-          class="split-item"
-          hover-class="split-item-hover"
-          catch:tap="openTrip"
-          data-id="{{item.id}}"
-          data-mode="browse"
-        >看行程</view>
       </view>
     </view>
   </view>

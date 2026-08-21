@@ -1,16 +1,60 @@
-<view class="page">
-  <t-cell-group theme="card">
-    <t-input label="旅途名称" placeholder="例如 川西小环线" value="{{travel_name}}" bindchange="onName" />
-    <t-input label="目的地" placeholder="例如 四姑娘山" value="{{destination}}" bindchange="onDest" />
-    <picker mode="date" value="{{start_date}}" bindchange="onStart">
-      <t-cell title="开始日期" note="{{start_date || '请选择'}}" arrow />
-    </picker>
-    <picker mode="date" value="{{end_date}}" bindchange="onEnd">
-      <t-cell title="结束日期" note="{{end_date || '请选择'}}" arrow />
-    </picker>
-    <t-textarea label="备注" placeholder="选填" value="{{remark}}" bindchange="onRemark" maxlength="200" />
-  </t-cell-group>
-  <view style="margin-top: 48rpx">
-    <t-button theme="primary" size="large" block bind:tap="submit">创建并生成邀请码</t-button>
+<view class="create-page">
+  <view class="intro">
+    <view class="intro-title">开一场新旅途</view>
+    <view class="intro-sub">先写下名字和日子，邀请码创建后自动生成</view>
   </view>
+
+  <view class="form-card">
+    <view class="field">
+      <view class="label">旅途名称</view>
+      <input
+        class="input"
+        placeholder="例如 川西小环线"
+        placeholder-class="ph"
+        value="{{travel_name}}"
+        maxlength="40"
+        bindinput="onName"
+      />
+    </view>
+
+    <view class="field">
+      <view class="label">目的地</view>
+      <input
+        class="input"
+        placeholder="例如 四姑娘山 · 丹巴"
+        placeholder-class="ph"
+        value="{{destination}}"
+        maxlength="40"
+        bindinput="onDest"
+      />
+    </view>
+
+    <view class="field-row">
+      <picker class="field half" mode="date" value="{{start_date}}" bindchange="onStart">
+        <view class="label">开始</view>
+        <view class="picker {{start_date ? '' : 'empty'}}">{{start_date || '选择日期'}}</view>
+      </picker>
+      <view class="date-sep">至</view>
+      <picker class="field half" mode="date" value="{{end_date}}" start="{{start_date}}" bindchange="onEnd">
+        <view class="label">结束</view>
+        <view class="picker {{end_date ? '' : 'empty'}}">{{end_date || '选择日期'}}</view>
+      </picker>
+    </view>
+
+    <view class="field last">
+      <view class="label">备注 <text class="optional">选填</text></view>
+      <textarea
+        class="area"
+        placeholder="想带上的约定、预算或注意事项"
+        placeholder-class="ph"
+        value="{{remark}}"
+        maxlength="200"
+        auto-height
+        bindinput="onRemark"
+      />
+    </view>
+  </view>
+
+  <view class="submit soft-btn main {{ready ? '' : 'disabled'}}" bind:tap="submit">创建旅途</view>
+  <view class="tip">创建后会生成邀请码，可分享给同行好友</view>
 </view>

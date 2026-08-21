@@ -8,11 +8,17 @@ function today() {
   return `${d.getFullYear()}-${m}-${day}`
 }
 
+function plansFromDays(days) {
+  return (days || []).flatMap((d) => (d.plans || []).map((p) => ({
+    ...p,
+    label: `D${p.day_num} ${p.place_name}`,
+  })))
+}
+
 Page({
   data: {
     travel_id: 0,
     id: null,
-    bill_type: 1,
     bill_name: '',
     amount: '',
     cost_type: 'other',
@@ -22,24 +28,51 @@ Page({
     payName: '',
     day_plan_id: null,
     planName: '',
-    visible_all: false,
+    visible_all: true,
     remark: '',
     members: [],
     plans: [],
     costTypes: COST_TYPES,
+    allShared: true,
   },
-  async onLoad(q) {
+  onLoad(q) {
+    this._booted = false
     const travel_id = Number(q.travel_id)
-    const trip = await api.travelDetail(travel_id)
-    if (!trip.can_bill) {
+    const user = getApp().globalData.user || wx.getStorageSync('user') || {}
+    this.setData({
+      travel_id,
+      id: q.id ? Number(q.id) : null,
+      pay_user_id: user.id,
+      payName: user.nickname,
+      consume_date: q.consume_date || today(),
+      day_plan_id: q.day_plan_id ? Number(q.day_plan_id) : null,
+    })
+
+    try {
+      const channel = this.getOpenerEventChannel && this.getOpenerEventChannel()
+      if (channel && channel.on) {
+        channel.on('init', (payload) => {
+          if (this._booted) return
+          this.bootFromParent(payload || {}, q, user)
+        })
+      }
+    } catch (e) { /* ignore */ }
+
+    setTimeout(() => {
+      if (!this._booted) this.bootFromApi(q, user)
+    }, 80)
+  },
+  bootFromParent(payload, q, user) {
+    const trip = payload.trip || {}
+    if (trip.id && !trip.can_bill) {
+      this._booted = true
       wx.showToast({ title: '没有记账权限', icon: 'none' })
       setTimeout(() => wx.navigateBack(), 500)
       return
     }
-    const user = getApp().globalData.user || wx.getStorageSync('user') || {}
-    const members = await api.travelMember(travel_id)
-    const planData = await api.planList(travel_id)
-    const plans = (planData.days || []).flatMap((d) => (d.plans || []).map((p) => ({ ...p, label: `D${p.day_num} ${p.place_name}` })))
+    this._booted = true
+    const members = (payload.members || []).map((m) => ({ ...m, checked: true }))
+    const plans = plansFromDays(payload.days)
     let day_plan_id = q.day_plan_id ? Number(q.day_plan_id) : null
     let planName = ''
     let cost_type = 'other'
@@ -51,42 +84,126 @@ Page({
       }
     }
     this.setData({
-      travel_id,
-      id: q.id ? Number(q.id) : null,
-      members: members.map((m) => ({ ...m, checked: true })),
+      members,
+      allShared: true,
       plans,
-      pay_user_id: user.id,
-      payName: user.nickname,
       day_plan_id,
       planName,
       cost_type,
       costLabel: costLabel(cost_type),
-      visible_all: !!user.default_bill_visible,
+      visible_all: true,
+      pay_user_id: user.id,
+      payName: user.nickname,
     })
-    if (q.id) {
-      const bills = await api.billList(travel_id)
-      const b = (bills || []).find((i) => i.id === Number(q.id))
-      if (b) {
-        const shareIds = (b.shares || []).map((s) => s.user_id)
-        this.setData({
-          bill_type: b.bill_type,
-          bill_name: b.bill_name,
-          amount: String(b.amount),
-          cost_type: b.cost_type,
-          costLabel: costLabel(b.cost_type),
-          consume_date: (b.consume_time || '').slice(0, 10) || today(),
-          pay_user_id: b.pay_user_id,
-          payName: b.pay_nickname,
-          day_plan_id: b.day_plan_id,
-          planName: b.plan_place_name || '',
-          visible_all: b.visible_all,
-          remark: b.remark || '',
-          members: members.map((m) => ({ ...m, checked: !shareIds.length || shareIds.includes(m.user_id) })),
-        })
+    if (payload.bill) this.applyBill(payload.bill, members)
+    else if (q.id && payload.bills) {
+      const b = (payload.bills || []).find((i) => i.id === Number(q.id))
+      if (b) this.applyBill(b, members)
+    }
+    this.refreshQuiet(q, user)
+  },
+  applyBill(b, members) {
+    let shareIds = (b.shares || []).map((s) => s.user_id)
+    if (!shareIds.length && b.bill_type === 2) shareIds = [b.pay_user_id]
+    const list = members || this.data.members
+    const checkedMembers = list.map((m) => ({
+      ...m,
+      checked: shareIds.length ? shareIds.includes(m.user_id) : true,
+    }))
+    this.setData({
+      bill_name: b.bill_name,
+      amount: String(b.amount),
+      cost_type: b.cost_type,
+      costLabel: costLabel(b.cost_type),
+      consume_date: (b.consume_time || '').slice(0, 10) || today(),
+      pay_user_id: b.pay_user_id,
+      payName: b.pay_nickname,
+      day_plan_id: b.day_plan_id,
+      planName: b.plan_place_name || '',
+      visible_all: b.bill_type === 2 ? !!b.visible_all : (b.visible_all !== false),
+      remark: b.remark || '',
+      members: checkedMembers,
+      allShared: checkedMembers.length > 0 && checkedMembers.every((m) => m.checked),
+    })
+  },
+  async refreshQuiet(q, user) {
+    try {
+      const [members, planData, bills] = await Promise.all([
+        api.travelMember(this.data.travel_id),
+        api.planList(this.data.travel_id, null, false),
+        q.id ? api.billList(this.data.travel_id) : Promise.resolve(null),
+      ])
+      const plans = plansFromDays(planData.days)
+      const mapped = (members || []).map((m) => {
+        const prev = (this.data.members || []).find((x) => x.user_id === m.user_id)
+        return { ...m, checked: prev ? !!prev.checked : true }
+      })
+      const patch = {
+        plans,
+        members: mapped,
+        allShared: mapped.length > 0 && mapped.every((m) => m.checked),
       }
+      if (!this.data.pay_user_id && user.id) {
+        patch.pay_user_id = user.id
+        patch.payName = user.nickname
+      }
+      this.setData(patch)
+      if (q.id && bills) {
+        const b = (bills || []).find((i) => i.id === Number(q.id))
+        if (b && !this.data.bill_name) this.applyBill(b, mapped)
+      }
+    } catch (e) { /* 静默 */ }
+  },
+  async bootFromApi(q, user) {
+    if (this._booted) return
+    this._booted = true
+    try {
+      const trip = await api.travelDetail(this.data.travel_id)
+      if (!trip.can_bill) {
+        wx.showToast({ title: '没有记账权限', icon: 'none' })
+        setTimeout(() => wx.navigateBack(), 500)
+        return
+      }
+      const [members, planData] = await Promise.all([
+        api.travelMember(this.data.travel_id),
+        api.planList(this.data.travel_id, null, false),
+      ])
+      const plans = plansFromDays(planData.days)
+      let day_plan_id = q.day_plan_id ? Number(q.day_plan_id) : null
+      let planName = ''
+      let cost_type = 'other'
+      if (day_plan_id) {
+        const p = plans.find((i) => i.id === day_plan_id)
+        if (p) {
+          planName = p.label
+          cost_type = ['sight', 'hotel', 'food', 'gas', 'transport'].includes(p.point_type) ? p.point_type : 'other'
+        }
+      }
+      const mapped = (members || []).map((m) => ({ ...m, checked: true }))
+      this.setData({
+        members: mapped,
+        allShared: true,
+        plans,
+        day_plan_id,
+        planName,
+        cost_type,
+        costLabel: costLabel(cost_type),
+        visible_all: true,
+        pay_user_id: user.id,
+        payName: user.nickname,
+      })
+      if (q.id) {
+        const bills = await api.billList(this.data.travel_id)
+        const b = (bills || []).find((i) => i.id === Number(q.id))
+        if (b) this.applyBill(b, mapped)
+      }
+    } catch (e) {
+      wx.showToast({ title: '加载失败', icon: 'none' })
     }
   },
-  setType(e) { this.setData({ bill_type: Number(e.currentTarget.dataset.v) }) },
+  setVisible(e) {
+    this.setData({ visible_all: Number(e.currentTarget.dataset.v) === 1 })
+  },
   setCost(e) {
     const cost_type = e.currentTarget.dataset.v
     this.setData({ cost_type, costLabel: costLabel(cost_type) })
@@ -95,7 +212,6 @@ Page({
   onAmount(e) { this.setData({ amount: e.detail.value }) },
   onRemark(e) { this.setData({ remark: e.detail.value }) },
   onDate(e) { this.setData({ consume_date: e.detail.value }) },
-  onVisible(e) { this.setData({ visible_all: e.detail.value }) },
   pickPayer() {
     wx.showActionSheet({
       itemList: this.data.members.map((m) => m.nickname),
@@ -111,12 +227,37 @@ Page({
   setPlan(e) {
     const id = e.currentTarget.dataset.id
     const p = this.data.plans.find((i) => i.id === id)
-    this.setData({ day_plan_id: id, planName: p ? p.label : '' })
+    if (!p) return
+    const cost_type = ['sight', 'hotel', 'food', 'gas', 'transport'].includes(p.point_type)
+      ? p.point_type
+      : this.data.cost_type
+    this.setData({
+      day_plan_id: id,
+      planName: p.label,
+      cost_type,
+      costLabel: costLabel(cost_type),
+    })
   },
   toggleShare(e) {
     const id = e.currentTarget.dataset.id
     const members = this.data.members.map((m) => (m.user_id === id ? { ...m, checked: !m.checked } : m))
-    this.setData({ members })
+    if (!members.some((m) => m.checked)) {
+      wx.showToast({ title: '至少选一人分摊', icon: 'none' })
+      return
+    }
+    this.setData({
+      members,
+      allShared: members.every((m) => m.checked),
+    })
+  },
+  toggleAllShare() {
+    const all = !this.data.allShared
+    const userId = this.data.pay_user_id
+    const members = this.data.members.map((m) => ({
+      ...m,
+      checked: all ? true : m.user_id === userId,
+    }))
+    this.setData({ members, allShared: all })
   },
   async submit() {
     const d = this.data
@@ -124,7 +265,8 @@ Page({
       wx.showToast({ title: '请填写名称和金额', icon: 'none' })
       return
     }
-    const share_user_ids = d.members.filter((m) => m.checked).map((m) => m.user_id)
+    let share_user_ids = d.members.filter((m) => m.checked).map((m) => m.user_id)
+    if (!share_user_ids.length) share_user_ids = [d.pay_user_id]
     wx.showLoading({ title: '保存中' })
     try {
       await api.billSave({
@@ -133,12 +275,12 @@ Page({
         day_plan_id: d.day_plan_id || null,
         bill_name: d.bill_name,
         amount: Number(d.amount),
-        bill_type: d.bill_type,
+        bill_type: 1,
         cost_type: d.cost_type,
         pay_user_id: d.pay_user_id,
         consume_time: `${d.consume_date} 12:00:00`,
         visible_all: d.visible_all,
-        share_user_ids: d.bill_type === 1 ? share_user_ids : [],
+        share_user_ids,
         remark: d.remark,
       })
       wx.navigateBack()

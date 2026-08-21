@@ -174,6 +174,13 @@ page {
   letter-spacing: 3rpx;
 }
 
+.chip-hint {
+  margin: -8rpx 0 14rpx;
+  font-size: 22rpx;
+  color: #b4c2ba;
+  line-height: 1.4;
+}
+
 .chip-row {
   display: flex;
   flex-wrap: wrap;

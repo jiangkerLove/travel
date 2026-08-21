@@ -2,7 +2,6 @@ const POINT_TYPES = [
   { value: 'sight', label: '景点', color: '#7C3AED' },
   { value: 'hotel', label: '住宿', color: '#0052D9' },
   { value: 'food', label: '餐饮', color: '#E37318' },
-  { value: 'via', label: '途经点', color: '#00A870' },
   { value: 'gas', label: '加油点', color: '#008858' },
   { value: 'transport', label: '交通', color: '#5E5E5E' },
 ]
@@ -172,7 +171,7 @@ function spreadOverlappingPoints(points) {
 
 function toMarkers(points, opts) {
   const markStart = !!(opts && opts.markStart)
-  return spreadOverlappingPoints(points).map((p, i) => {
+  const placeMarkers = spreadOverlappingPoints(points).map((p, i) => {
     const name = String(p.place_name || p.name || '').trim()
     const short = name.length > 10 ? `${name.slice(0, 10)}…` : name
     const isStart = !!(p.isStart || (markStart && i === 0))
@@ -200,9 +199,51 @@ function toMarkers(points, opts) {
       },
     }
   })
+
+  // 路段用时标在路线中段，不占列表
+  const showLegs = !(opts && opts.hideLegs)
+  const legMarkers = showLegs ? toLegTimeMarkers(opts && opts.lines) : []
+  return placeMarkers.concat(legMarkers)
 }
 
-/** includePoints 用：把起点往视野里收一点，避免贴边/气泡被裁掉像「没点」 */
+/** 在路段中点标注交通方式 + 路程时间 */
+function toLegTimeMarkers(lines) {
+  return (lines || [])
+    .map((l, idx) => {
+      const pts = (l.points || []).filter((p) => p.latitude && p.longitude)
+      if (pts.length < 2) return null
+      const mode = trafficLabel(l.traffic_type)
+      const hint = formatLegHint(l.distance_m, l.duration_s)
+      const content = [mode, hint].filter(Boolean).join(' · ')
+      if (!content) return null
+      const mid = pts[Math.floor(pts.length / 2)]
+      return {
+        id: 900000000 + idx,
+        latitude: Number(mid.latitude),
+        longitude: Number(mid.longitude),
+        width: 12,
+        height: 12,
+        alpha: 0.01,
+        anchor: { x: 0.5, y: 0.5 },
+        zIndex: 50 + idx,
+        callout: {
+          content,
+          display: 'ALWAYS',
+          padding: 5,
+          borderRadius: 999,
+          fontSize: 10,
+          color: '#5d8a76',
+          bgColor: '#ffffff',
+          borderWidth: 1,
+          borderColor: '#cfe0d6',
+          textAlign: 'center',
+        },
+      }
+    })
+    .filter(Boolean)
+}
+
+/** includePoints 用：只轻微外扩，避免视野被拉得太小 */
 function fitPointsForMap(points) {
   const pts = (points || [])
     .filter((p) => p.latitude && p.longitude)
@@ -213,7 +254,7 @@ function fitPointsForMap(points) {
   if (!pts.length) return pts
   if (pts.length === 1) {
     const s = pts[0]
-    const pad = 0.08
+    const pad = 0.022
     return [
       s,
       { latitude: s.latitude + pad, longitude: s.longitude },
@@ -222,31 +263,27 @@ function fitPointsForMap(points) {
       { latitude: s.latitude, longitude: s.longitude - pad },
     ]
   }
-  const start = pts[0]
-  let latSum = 0
-  let lngSum = 0
+
+  let minLat = pts[0].latitude
+  let maxLat = pts[0].latitude
+  let minLng = pts[0].longitude
+  let maxLng = pts[0].longitude
   pts.forEach((p) => {
-    latSum += p.latitude
-    lngSum += p.longitude
+    minLat = Math.min(minLat, p.latitude)
+    maxLat = Math.max(maxLat, p.latitude)
+    minLng = Math.min(minLng, p.longitude)
+    maxLng = Math.max(maxLng, p.longitude)
   })
-  const cLat = latSum / pts.length
-  const cLng = lngSum / pts.length
-  const dLat = start.latitude - cLat
-  const dLng = start.longitude - cLng
-  const dist = Math.sqrt(dLat * dLat + dLng * dLng) || 0.05
-  // 起点外侧再扩一截，保证第一天「远起点」也落在框内
-  pts.push({
-    latitude: start.latitude + dLat * 0.35,
-    longitude: start.longitude + dLng * 0.35,
-  })
-  const pad = Math.max(0.06, Math.min(dist * 0.12, 0.35))
-  pts.push(
-    { latitude: start.latitude + pad, longitude: start.longitude },
-    { latitude: start.latitude - pad, longitude: start.longitude },
-    { latitude: start.latitude, longitude: start.longitude + pad },
-    { latitude: start.latitude, longitude: start.longitude - pad },
-  )
-  return pts
+  const spanLat = Math.max(maxLat - minLat, 0.008)
+  const spanLng = Math.max(maxLng - minLng, 0.008)
+  // 只留一点点边，给气泡空间，不要把整图撑开
+  const padLat = Math.min(spanLat * 0.06, 0.03)
+  const padLng = Math.min(spanLng * 0.06, 0.03)
+  return [
+    ...pts,
+    { latitude: minLat - padLat, longitude: minLng - padLng },
+    { latitude: maxLat + padLat, longitude: maxLng + padLng },
+  ]
 }
 
 /** 当天列表点 + 跨天出发起点（有坐标才拼上） */

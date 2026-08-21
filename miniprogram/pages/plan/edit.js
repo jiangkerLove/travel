@@ -1,5 +1,5 @@
 const { api } = require('../../utils/api')
-const { POINT_TYPES } = require('../../utils/constants')
+const { POINT_TYPES, TRAFFIC_TYPES } = require('../../utils/constants')
 
 function pin(lat, lng) {
   if (!lat || !lng) return []
@@ -7,8 +7,10 @@ function pin(lat, lng) {
     id: 1,
     latitude: Number(lat),
     longitude: Number(lng),
-    width: 28,
-    height: 28,
+    // 默认水滴偏高，正方形会被压扁
+    width: 24,
+    height: 36,
+    anchor: { x: 0.5, y: 1 },
   }]
 }
 
@@ -20,6 +22,7 @@ Page({
     day_num: 1,
     dayOptions: [],
     point_type: 'sight',
+    traffic_type: 'drive',
     pois: [],
     searching: false,
     emptyHint: false,
@@ -35,36 +38,29 @@ Page({
     longitude: null,
     latitude: null,
     remark: '',
-    pointTypes: POINT_TYPES.filter((t) => t.value !== 'via'),
+    pointTypes: POINT_TYPES,
+    trafficTypes: TRAFFIC_TYPES,
     isEdit: false,
-    isVia: false,
   },
   async onLoad(q) {
-    const isVia = q.via === '1'
     this._keyword = ''
     this._seq = 0
     this._mapInited = false
+    this._booted = false
     this.setData({
       travel_id: Number(q.travel_id),
       day_num: Number(q.day_num || 1),
       id: q.id ? Number(q.id) : null,
       after_id: q.after_id ? Number(q.after_id) : null,
       isEdit: !!q.id,
-      isVia,
-      point_type: isVia ? 'via' : 'sight',
-      pointTypes: isVia
-        ? POINT_TYPES.filter((t) => t.value === 'via')
-        : POINT_TYPES.filter((t) => t.value !== 'via'),
+      point_type: 'sight',
+      traffic_type: 'drive',
+      pointTypes: POINT_TYPES,
+      trafficTypes: TRAFFIC_TYPES,
     })
     wx.setNavigationBarTitle({
-      title: q.id ? '编辑地点' : (isVia ? '添加途经点' : '添加地点'),
+      title: q.id ? '编辑地点' : '添加地点',
     })
-    const trip = await api.travelDetail(this.data.travel_id)
-    if (!trip.can_edit || trip.is_sample || Number(trip.status) === 2) {
-      wx.showToast({ title: '示例/归档旅途仅可查看', icon: 'none' })
-      setTimeout(() => wx.navigateBack(), 500)
-      return
-    }
     wx.getLocation({
       type: 'gcj02',
       success: (r) => {
@@ -72,42 +68,106 @@ Page({
         this._aroundLat = r.latitude
       },
     })
-    const data = await api.planList(this.data.travel_id, null, false)
-    const days = data.days || []
-    const dayOptions = days.map((d) => ({
-      day_num: d.day_num,
-      label: `D${d.day_num}`,
-      date: (d.date || '').slice(5),
-    }))
-    this.setData({ dayOptions })
-    if (q.id) {
-      const all = days.flatMap((d) => d.plans || [])
-      const p = all.find((i) => i.id === Number(q.id))
-      if (p) {
-        this._keyword = p.place_name || ''
-        this._mapInited = true
-        this._origDay = p.day_num
-        this.setData({
-          day_num: p.day_num,
-          point_type: p.point_type,
-          showSearch: false,
-          searchFocus: false,
-          picked: true,
-          mapShown: true,
-          place_name: p.place_name,
-          place_address: '',
-          longitude: p.longitude,
-          latitude: p.latitude,
-          mapLat: Number(p.latitude) || 30.67,
-          mapLng: Number(p.longitude) || 104.06,
-          markers: pin(p.latitude, p.longitude),
-          remark: p.remark || '',
-          isVia: p.point_type === 'via',
-          pointTypes: p.point_type === 'via'
-            ? POINT_TYPES.filter((t) => t.value === 'via')
-            : POINT_TYPES.filter((t) => t.value !== 'via'),
+
+    // 优先用旅途页已有数据，避免进页再刷接口闪一下
+    try {
+      const channel = this.getOpenerEventChannel && this.getOpenerEventChannel()
+      if (channel && channel.on) {
+        channel.on('init', (payload) => {
+          if (this._booted) return
+          this.bootFromParent(payload || {}, q)
         })
       }
+    } catch (e) { /* ignore */ }
+
+    // 无 opener 数据时再兜底请求
+    setTimeout(() => {
+      if (!this._booted) this.bootFromApi(q)
+    }, 80)
+  },
+  denyReadonly() {
+    wx.showToast({ title: '示例/归档旅途仅可查看', icon: 'none' })
+    setTimeout(() => wx.navigateBack(), 500)
+  },
+  applyDayOptions(days) {
+    const dayOptions = (days || []).map((d) => ({
+      day_num: d.day_num,
+      label: `D${d.day_num}`,
+      date: d.shortDate || (d.date || '').slice(5),
+    }))
+    this.setData({ dayOptions })
+    return dayOptions
+  },
+  applyPlan(p) {
+    if (!p) return
+    this._keyword = p.place_name || ''
+    this._mapInited = true
+    this._origDay = p.day_num
+    const pointType = p.point_type === 'via' ? 'sight' : (p.point_type || 'sight')
+    const trafficType = TRAFFIC_TYPES.some((t) => t.value === p.traffic_type)
+      ? p.traffic_type
+      : 'drive'
+    this.setData({
+      day_num: p.day_num,
+      point_type: POINT_TYPES.some((t) => t.value === pointType) ? pointType : 'sight',
+      traffic_type: trafficType,
+      showSearch: false,
+      searchFocus: false,
+      picked: true,
+      mapShown: true,
+      place_name: p.place_name,
+      place_address: '',
+      longitude: p.longitude,
+      latitude: p.latitude,
+      mapLat: Number(p.latitude) || 30.67,
+      mapLng: Number(p.longitude) || 104.06,
+      markers: pin(p.latitude, p.longitude),
+      remark: p.remark || '',
+    })
+  },
+  bootFromParent(payload, q) {
+    const trip = payload.trip || {}
+    if (trip.id && (!trip.can_edit || trip.is_sample || Number(trip.status) === 2)) {
+      this._booted = true
+      this.denyReadonly()
+      return
+    }
+    this._booted = true
+    const days = payload.days || []
+    this.applyDayOptions(days)
+    let plan = payload.plan
+    if (!plan && q.id) {
+      plan = days.flatMap((d) => d.plans || []).find((i) => i.id === Number(q.id))
+    }
+    if (plan) this.applyPlan(plan)
+    // 先展示带入数据，再静默刷新天数列表
+    this.refreshDaysQuiet()
+  },
+  async refreshDaysQuiet() {
+    try {
+      const data = await api.planList(this.data.travel_id, null, false)
+      if (!data || !data.days) return
+      this.applyDayOptions(data.days)
+    } catch (e) { /* 静默失败，沿用带入数据 */ }
+  },
+  async bootFromApi(q) {
+    if (this._booted) return
+    this._booted = true
+    try {
+      const trip = await api.travelDetail(this.data.travel_id)
+      if (!trip.can_edit || trip.is_sample || Number(trip.status) === 2) {
+        this.denyReadonly()
+        return
+      }
+      const data = await api.planList(this.data.travel_id, null, false)
+      const days = data.days || []
+      this.applyDayOptions(days)
+      if (q.id) {
+        const p = days.flatMap((d) => d.plans || []).find((i) => i.id === Number(q.id))
+        if (p) this.applyPlan(p)
+      }
+    } catch (e) {
+      wx.showToast({ title: '加载失败', icon: 'none' })
     }
   },
   onUnload() {
@@ -235,6 +295,7 @@ Page({
     })
   },
   setType(e) { this.setData({ point_type: e.currentTarget.dataset.v }) },
+  setTraffic(e) { this.setData({ traffic_type: e.currentTarget.dataset.v }) },
   onRemark(e) { this.setData({ remark: e.detail.value }) },
   async submit() {
     const d = this.data
@@ -252,7 +313,7 @@ Page({
         place_name: d.place_name,
         longitude: d.longitude,
         latitude: d.latitude,
-        traffic_type: 'drive',
+        traffic_type: d.traffic_type || 'drive',
         traffic_duration: null,
         remark: d.remark,
         after_id: d.after_id,

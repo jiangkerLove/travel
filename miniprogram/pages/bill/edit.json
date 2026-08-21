@@ -1,3 +1,5 @@
 {
-  "navigationBarTitleText": "记账"
+  "navigationBarTitleText": "记账",
+  "navigationBarBackgroundColor": "#f3f6f3",
+  "backgroundColor": "#f3f6f3"
 }
