@@ -24,7 +24,9 @@ cp .env.example .env
 - `JWT_SECRET`
 - `WECHAT_APPID` / `WECHAT_SECRET`（小程序正式登录）
 
-默认**不**启动内置数据库容器；API 只读 `DATABASE_URL`。
+默认**不**内置数据库；API 只读 `DATABASE_URL` 连接你已有的 PostgreSQL。
+
+基础镜像默认走个人阿里云仓库（与 debian 同前缀）：`rust` / `nginx`；可用 `.env` 的 `RUST_IMAGE` / `NGINX_IMAGE` 覆盖。构建前需已 `docker login` 该仓库，并确保仓库中有对应镜像 tag。
 
 ### 2. 启动
 
@@ -65,13 +67,6 @@ docker compose down          # 停服务
 ---
 
 ## 本地开发
-
-可选：起一个临时库（profile）
-
-```bash
-docker compose --profile local-db up -d db
-# 此时 DATABASE_URL=postgres://travel:travel@127.0.0.1:5432/travel
-```
 
 后端：
 

@@ -1,29 +1,10 @@
 services:
-  # 默认不启：生产复用已有库，只配 DATABASE_URL 即可
-  # 本地临时库：docker compose --profile local-db up -d
-  db:
-    profiles: ["local-db"]
-    image: postgres:16-alpine
-    container_name: travel-postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: travel
-      POSTGRES_PASSWORD: travel
-      POSTGRES_DB: travel
-    volumes:
-      - travel_pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U travel -d travel"]
-      interval: 5s
-      timeout: 5s
-      retries: 12
-    ports:
-      - "5432:5432"
-
   api:
     build:
       context: ./server
       dockerfile: Dockerfile
+      args:
+        RUST_IMAGE: ${RUST_IMAGE:-crpi-jya41iij3cykq66t.cn-chengdu.personal.cr.aliyuncs.com/jiangker_love/rust:1-bookworm}
     image: travel-api:latest
     container_name: travel-api
     restart: unless-stopped
@@ -50,7 +31,7 @@ services:
   # 唯一对外入口：路径分流后转到 api / 后续 admin
   # 外层 Nginx 只需把 travel.jiangker.cn 端口转发到本机 PORT
   gateway:
-    image: nginx:1.27-alpine
+    image: ${NGINX_IMAGE:-crpi-jya41iij3cykq66t.cn-chengdu.personal.cr.aliyuncs.com/jiangker_love/nginx:1.27-alpine}
     container_name: travel-gateway
     restart: unless-stopped
     depends_on:
@@ -72,6 +53,3 @@ services:
   #     API_BASE: http://api:3000
   #   expose:
   #     - "80"
-
-volumes:
-  travel_pgdata:

@@ -1,6 +1,22 @@
 # ---- build ----
-FROM rust:1-bookworm AS builder
+# 与运行时同属个人阿里云仓库；可用 --build-arg 覆盖
+ARG RUST_IMAGE=crpi-jya41iij3cykq66t.cn-chengdu.personal.cr.aliyuncs.com/jiangker_love/rust:1-bookworm
+FROM ${RUST_IMAGE} AS builder
 WORKDIR /app
+
+# crates.io 国内源，加快依赖下载
+ENV CARGO_HOME=/usr/local/cargo
+RUN mkdir -p ${CARGO_HOME} \
+  && printf '%s\n' \
+    '[source.crates-io]' \
+    'replace-with = "rsproxy-sparse"' \
+    '[source.rsproxy-sparse]' \
+    'registry = "sparse+https://rsproxy.cn/index/"' \
+    '[registries.rsproxy]' \
+    'index = "https://rsproxy.cn/crates.io-index"' \
+    '[net]' \
+    'git-fetch-with-cli = true' \
+    > ${CARGO_HOME}/config.toml
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends pkg-config libssl-dev \
