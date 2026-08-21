@@ -1,4 +1,4 @@
-use chrono::{Datelike, Duration, Local, NaiveDate, Weekday};
+use chrono::{Datelike, Duration, Local, NaiveDate, NaiveDateTime, Weekday};
 use serde::Serialize;
 use std::collections::HashSet;
 
@@ -67,8 +67,8 @@ struct Span {
     rest: i64,
 }
 
-fn today() -> NaiveDate {
-    Local::now().date_naive()
+fn now() -> NaiveDateTime {
+    Local::now().naive_local()
 }
 
 fn ymd(y: i32, m: u32, d: u32) -> NaiveDate {
@@ -246,7 +246,8 @@ fn statutory_days(year: i32) -> Vec<NaiveDate> {
     ]
 }
 
-fn next_holiday(from: NaiveDate) -> Option<HolidayVo> {
+fn next_holiday(now: NaiveDateTime) -> Option<HolidayVo> {
+    let from = now.date();
     for y in from.year()..=from.year() + 2 {
         for h in generate_year_breaks(y) {
             if h.end >= from {
@@ -259,16 +260,170 @@ fn next_holiday(from: NaiveDate) -> Option<HolidayVo> {
                     start_text: format!("{}月{}日", h.start.month(), h.start.day()),
                     until,
                     ongoing,
-                    hint: if ongoing {
-                        format!("放到 {}月{}日", h.end.month(), h.end.day())
-                    } else {
-                        format!("{} 天后", until)
-                    },
+                    hint: span_hint(now, h.start, h.end, h.name),
                 });
             }
         }
     }
     None
+}
+
+const OFF_HOUR: u32 = 18;
+
+struct RestSpan {
+    name: String,
+    start: NaiveDate,
+    end: NaiveDate,
+}
+
+fn named_holiday(d: NaiveDate) -> Option<String> {
+    for y in (d.year() - 1)..=(d.year() + 1) {
+        for h in generate_year_breaks(y) {
+            if d >= h.start && d <= h.end {
+                return Some(h.name.to_string());
+            }
+        }
+    }
+    None
+}
+
+fn is_rest_day(d: NaiveDate) -> bool {
+    is_weekend(d) || named_holiday(d).is_some()
+}
+
+fn expand_rest(d: NaiveDate) -> RestSpan {
+    let mut start = d;
+    let mut end = d;
+    while is_rest_day(add_days(start, -1)) {
+        start = add_days(start, -1);
+    }
+    while is_rest_day(add_days(end, 1)) {
+        end = add_days(end, 1);
+    }
+    let mut name = "周末".to_string();
+    let mut cur = start;
+    while cur <= end {
+        if let Some(n) = named_holiday(cur) {
+            name = n;
+            break;
+        }
+        cur = add_days(cur, 1);
+    }
+    RestSpan { name, start, end }
+}
+
+fn rest_span_at(d: NaiveDate) -> Option<RestSpan> {
+    if is_rest_day(d) {
+        Some(expand_rest(d))
+    } else {
+        None
+    }
+}
+
+fn next_rest_after(d: NaiveDate) -> Option<RestSpan> {
+    for i in 1..16 {
+        let n = add_days(d, i);
+        if is_rest_day(n) {
+            return Some(expand_rest(n));
+        }
+    }
+    None
+}
+
+fn hours_left(now: NaiveDateTime, target: NaiveDateTime) -> i64 {
+    if now >= target {
+        return 0;
+    }
+    let secs = (target - now).num_seconds();
+    (secs + 3599) / 3600
+}
+
+fn at_hour(d: NaiveDate, hour: u32) -> NaiveDateTime {
+    d.and_hms_opt(hour, 0, 0).unwrap()
+}
+
+fn midnight_after(d: NaiveDate) -> NaiveDateTime {
+    at_hour(add_days(d, 1), 0)
+}
+
+fn is_named_holiday(name: &str) -> bool {
+    name != "周末"
+}
+
+fn break_countdown(now: NaiveDateTime) -> ExtraRow {
+    let today = now.date();
+    if let Some(span) = rest_span_at(today) {
+        let holiday = is_named_holiday(&span.name);
+        let k = if holiday { "假期中" } else { "周末" };
+        if today == span.end {
+            let h = hours_left(now, midnight_after(span.end)).max(1);
+            ExtraRow {
+                k: k.into(),
+                v: format!("还有 {h} 小时结束"),
+            }
+        } else {
+            let days = diff_days(today, span.end).max(1);
+            ExtraRow {
+                k: k.into(),
+                v: format!("还有 {days} 天结束"),
+            }
+        }
+    } else if let Some(span) = next_rest_after(today) {
+        let holiday = is_named_holiday(&span.name);
+        let k = if holiday { "距离假期" } else { "距离周末" };
+        let label = span.name.clone();
+        let last_work = add_days(span.start, -1);
+        if today == last_work {
+            let h = hours_left(now, at_hour(today, OFF_HOUR));
+            let v = if h == 0 {
+                let days = (diff_days(span.start, span.end) + 1).max(1);
+                if holiday {
+                    format!("假期还有 {days} 天")
+                } else {
+                    format!("周末还有 {days} 天")
+                }
+            } else {
+                format!("还有 {h} 小时开始{label}")
+            };
+            ExtraRow { k: k.into(), v }
+        } else {
+            let days = diff_days(today, span.start).max(1);
+            ExtraRow {
+                k: k.into(),
+                v: format!("还有 {days} 天"),
+            }
+        }
+    } else {
+        ExtraRow {
+            k: "距离周末".into(),
+            v: "—".into(),
+        }
+    }
+}
+
+fn span_hint(now: NaiveDateTime, start: NaiveDate, end: NaiveDate, name: &str) -> String {
+    let today = now.date();
+    if today >= start && today <= end {
+        if today == end {
+            format!("还有 {} 小时结束", hours_left(now, midnight_after(end)).max(1))
+        } else {
+            format!("还有 {} 天结束", diff_days(today, end).max(1))
+        }
+    } else if today + Duration::days(1) == start {
+        let h = hours_left(now, at_hour(today, OFF_HOUR));
+        if h == 0 {
+            let days = (diff_days(start, end) + 1).max(1);
+            if is_named_holiday(name) {
+                format!("假期还有 {days} 天")
+            } else {
+                format!("周末还有 {days} 天")
+            }
+        } else {
+            format!("还有 {h} 小时开始{name}")
+        }
+    } else {
+        format!("还有 {} 天", diff_days(today, start).max(1))
+    }
 }
 
 fn delay_months(birth: NaiveDate, orig_age: i32, step_months: i32, max_delay: i32) -> i32 {
@@ -423,15 +578,21 @@ fn age_on(birth: NaiveDate, on: NaiveDate) -> i32 {
     age
 }
 
-fn spring_count(today: NaiveDate, retire: NaiveDate) -> i32 {
-    let mut n = 0;
-    for y in today.year()..=retire.year() {
-        let eve = add_days(lunar_to_solar(y, 1, 1), -1);
-        if eve >= today && eve < retire {
-            n += 1;
-        }
+fn duration_ym(from: NaiveDate, to: NaiveDate) -> String {
+    let mut y = to.year() - from.year();
+    let mut m = to.month() as i32 - from.month() as i32;
+    if to.day() < from.day() {
+        m -= 1;
     }
-    n
+    if m < 0 {
+        m += 12;
+        y -= 1;
+    }
+    if y > 0 {
+        format!("{y}年{m}月")
+    } else {
+        format!("{m}月")
+    }
 }
 
 fn birthday_on(birth: NaiveDate, year: i32) -> NaiveDate {
@@ -471,15 +632,6 @@ fn duration_text(from: NaiveDate, to: NaiveDate) -> String {
         parts.push(format!("{d}天"));
     }
     parts.join("")
-}
-
-fn days_until_weekend(today: NaiveDate) -> u32 {
-    let w = js_weekday(today);
-    if w == 0 || w == 6 {
-        0
-    } else {
-        6 - w
-    }
 }
 
 fn format_days(n: i64) -> String {
@@ -533,14 +685,15 @@ pub fn build_work_life(
     female_role: i16,
     work_start_year: Option<i32>,
 ) -> Option<WorkLifeVo> {
-    let today = today();
+    let now = now();
+    let today = now.date();
     let birth = birthday?;
     if gender != 1 && gender != 2 {
         return None;
     }
     let age = age_on(birth, today);
     let gender_text = if gender == 1 { "男" } else { "女" }.to_string();
-    let holiday = next_holiday(today);
+    let holiday = next_holiday(now);
     let retire = retirement_of(birth, gender, female_role);
     if today >= retire.date {
         return Some(WorkLifeVo {
@@ -597,15 +750,6 @@ pub fn build_work_life(
         k: "距离退休".into(),
         v: duration_text(today, retire.date),
     });
-    let springs = spring_count(today, retire.date);
-    extras.push(ExtraRow {
-        k: "还要过春节".into(),
-        v: if springs > 0 {
-            format!("{springs} 个")
-        } else {
-            "今年春节已过".into()
-        },
-    });
     let bday = next_birthday_days(birth, today);
     extras.push(ExtraRow {
         k: "下个生日".into(),
@@ -615,20 +759,12 @@ pub fn build_work_life(
             "就是今天".into()
         },
     });
-    let weekend_left = days_until_weekend(today);
-    extras.push(ExtraRow {
-        k: if weekend_left == 0 { "今天".into() } else { "距离周末".into() },
-        v: if weekend_left == 0 {
-            "已经在休息".into()
-        } else {
-            format!("{weekend_left} 天后")
-        },
-    });
-    let worked = (today.year() - work_start).max(0);
-    if worked > 0 {
+    extras.push(break_countdown(now));
+    let work_from = ymd(work_start, 1, 1);
+    if today > work_from {
         extras.push(ExtraRow {
             k: "已经工作".into(),
-            v: format!("{worked} 年"),
+            v: duration_ym(work_from, today),
         });
     }
     Some(WorkLifeVo {
@@ -656,5 +792,16 @@ mod tests {
         assert_eq!(lunar_to_solar(2025, 1, 1), ymd(2025, 1, 29));
         assert_eq!(lunar_to_solar(2025, 5, 5), ymd(2025, 5, 31));
         assert_eq!(lunar_to_solar(2025, 8, 15), ymd(2025, 10, 6));
+    }
+
+    #[test]
+    fn hours_after_midnight_until_off() {
+        let now = at_hour(ymd(2026, 8, 21), 0) + Duration::seconds(1);
+        assert_eq!(hours_left(now, at_hour(ymd(2026, 8, 21), 18)), 18);
+    }
+
+    #[test]
+    fn worked_as_year_month() {
+        assert_eq!(duration_ym(ymd(2016, 1, 1), ymd(2026, 8, 21)), "10年7月");
     }
 }
