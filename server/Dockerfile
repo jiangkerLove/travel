@@ -5,10 +5,24 @@ ARG BASE_IMAGE=crpi-jya41iij3cykq66t.cn-chengdu.personal.cr.aliyuncs.com/jiangke
 FROM ${BASE_IMAGE} AS builder
 WORKDIR /app
 
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends \
-    ca-certificates curl build-essential pkg-config libssl-dev \
-  && rm -rf /var/lib/apt/lists/*
+# 先换国内 apt 源，再装依赖（避免直连 deb.debian.org 极慢）
+RUN set -eux; \
+  if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+    sed -i \
+      -e 's|https\?://deb.debian.org|https://mirrors.aliyun.com|g' \
+      -e 's|https\?://security.debian.org|https://mirrors.aliyun.com|g' \
+      /etc/apt/sources.list.d/debian.sources; \
+  fi; \
+  if [ -f /etc/apt/sources.list ]; then \
+    sed -i \
+      -e 's|deb.debian.org|mirrors.aliyun.com|g' \
+      -e 's|security.debian.org|mirrors.aliyun.com|g' \
+      /etc/apt/sources.list; \
+  fi; \
+  apt-get update; \
+  apt-get install -y --no-install-recommends \
+    ca-certificates curl build-essential pkg-config libssl-dev; \
+  rm -rf /var/lib/apt/lists/*
 
 # 安装 Rust（国内静态资源镜像）
 ENV RUSTUP_HOME=/usr/local/rustup \
@@ -44,10 +58,23 @@ RUN touch src/main.rs && cargo build --release \
 
 # ---- runtime ----
 FROM ${BASE_IMAGE} AS runtime
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates libssl3 curl \
-  && rm -rf /var/lib/apt/lists/* \
-  && useradd --system --create-home --uid 10001 app
+RUN set -eux; \
+  if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+    sed -i \
+      -e 's|https\?://deb.debian.org|https://mirrors.aliyun.com|g' \
+      -e 's|https\?://security.debian.org|https://mirrors.aliyun.com|g' \
+      /etc/apt/sources.list.d/debian.sources; \
+  fi; \
+  if [ -f /etc/apt/sources.list ]; then \
+    sed -i \
+      -e 's|deb.debian.org|mirrors.aliyun.com|g' \
+      -e 's|security.debian.org|mirrors.aliyun.com|g' \
+      /etc/apt/sources.list; \
+  fi; \
+  apt-get update; \
+  apt-get install -y --no-install-recommends ca-certificates libssl3 curl; \
+  rm -rf /var/lib/apt/lists/*; \
+  useradd --system --create-home --uid 10001 app
 
 WORKDIR /app
 COPY --from=builder /app/target/release/server /usr/local/bin/travel-api
