@@ -6,6 +6,7 @@
     "pages/profile/edit",
     "pages/login/login",
     "pages/travel/create",
+    "pages/travel/edit",
     "pages/travel/join",
     "pages/travel/home",
     "pages/plan/edit",

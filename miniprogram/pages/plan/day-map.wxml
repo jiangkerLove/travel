@@ -1,5 +1,16 @@
 <view class="page">
-  <map id="dayMap" class="map" latitude="{{mapLat}}" longitude="{{mapLng}}" scale="10" markers="{{markers}}" polyline="{{polyline}}" bindmarkertap="onMarker" />
+  <map
+    id="dayMap"
+    class="map"
+    latitude="{{mapLat}}"
+    longitude="{{mapLng}}"
+    scale="10"
+    markers="{{markers}}"
+    polyline="{{polyline}}"
+    enable-poi="{{true}}"
+    enable-building="{{true}}"
+    bindmarkertap="onMarker"
+  />
   <view class="card" wx:for="{{points}}" wx:key="id" bind:tap="openPlace" data-id="{{item.id}}">
     <view class="title">{{index + 1}}. {{item.place_name}}</view>
     <view class="muted">{{item.typeLabel}}{{item.legHint ? ' · ' + item.legHint : ''}}</view>

@@ -1,0 +1,60 @@
+<view class="create-page">
+  <view class="intro">
+    <view class="intro-title">修改旅途</view>
+    <view class="intro-sub">可改名称、目的地和日期。延长结束日会多出空天；缩短日期会去掉超出天数的行程点。</view>
+  </view>
+
+  <view class="form-card">
+    <view class="field">
+      <view class="label">旅途名称</view>
+      <input
+        class="input"
+        placeholder="旅途名称"
+        placeholder-class="ph"
+        value="{{travel_name}}"
+        maxlength="40"
+        bindinput="onName"
+      />
+    </view>
+
+    <view class="field">
+      <view class="label">目的地</view>
+      <input
+        class="input"
+        placeholder="目的地"
+        placeholder-class="ph"
+        value="{{destination}}"
+        maxlength="40"
+        bindinput="onDest"
+      />
+    </view>
+
+    <view class="field-row">
+      <picker class="field half" mode="date" value="{{start_date}}" bindchange="onStart">
+        <view class="label">开始</view>
+        <view class="picker {{start_date ? '' : 'empty'}}">{{start_date || '选择日期'}}</view>
+      </picker>
+      <view class="date-sep">至</view>
+      <picker class="field half" mode="date" value="{{end_date}}" start="{{start_date}}" bindchange="onEnd">
+        <view class="label">结束</view>
+        <view class="picker {{end_date ? '' : 'empty'}}">{{end_date || '选择日期'}}</view>
+      </picker>
+    </view>
+
+    <view class="field last">
+      <view class="label">备注 <text class="optional">选填</text></view>
+      <textarea
+        class="area"
+        placeholder="约定、预算或注意事项"
+        placeholder-class="ph"
+        value="{{remark}}"
+        maxlength="200"
+        auto-height
+        bindinput="onRemark"
+      />
+    </view>
+  </view>
+
+  <view class="day-hint" wx:if="{{dayCount}}">共 {{dayCount}} 天</view>
+  <view class="submit soft-btn main {{ready ? '' : 'disabled'}}" bind:tap="submit">保存</view>
+</view>

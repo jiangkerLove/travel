@@ -22,6 +22,7 @@ pub fn router(state: AppState) -> Router {
     let api = Router::new()
         .route("/api/user/info", get(user::info).post(user::update))
         .route("/api/travel/create", post(travel::create))
+        .route("/api/travel/update", post(travel::update))
         .route("/api/travel/list", get(travel::list))
         .route("/api/travel/detail", get(travel::detail))
         .route("/api/travel/join", post(travel::join))

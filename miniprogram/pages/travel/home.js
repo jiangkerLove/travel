@@ -1038,6 +1038,13 @@ Page({
     await api.travelLock({ travel_id: this.data.id, is_lock: !this.data.trip.is_lock })
     this.refresh()
   },
+  goEditTravel() {
+    if (this.data.trip.is_lock) {
+      wx.showToast({ title: '已锁定，不可修改', icon: 'none' })
+      return
+    }
+    wx.navigateTo({ url: `/pages/travel/edit?id=${this.data.id}` })
+  },
   async archive() {
     if (!this.data.isCreator) {
       wx.showToast({ title: '仅创建人可归档', icon: 'none' })

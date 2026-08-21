@@ -222,6 +222,109 @@ pub async fn create(
     Ok(ok(to_vo(&travel, 1, 1, true, true)))
 }
 
+#[derive(Deserialize)]
+pub struct UpdateReq {
+    pub travel_id: i64,
+    pub travel_name: Option<String>,
+    pub destination: Option<String>,
+    pub start_date: Option<String>,
+    pub end_date: Option<String>,
+    pub remark: Option<String>,
+}
+
+/// 团长修改旅途信息 / 日期；缩短日期时删除超出天数的行程点
+pub async fn update(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Json(req): Json<UpdateReq>,
+) -> Result<Json<ApiOk<TravelVo>>, AppError> {
+    require_leader(&state.pool, req.travel_id, user.id).await?;
+    let t = find_travel(&state.pool, req.travel_id).await?;
+    if crate::sample::is_sample_remark(&t.remark) {
+        return Err(AppError::BadRequest("示例旅途不可修改".into()));
+    }
+    if t.status == 2 {
+        return Err(AppError::BadRequest("已归档旅途不可修改".into()));
+    }
+    if t.is_lock {
+        return Err(AppError::BadRequest("已锁定，不可修改日期".into()));
+    }
+
+    let name = req
+        .travel_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(t.travel_name.as_str());
+    let dest = req
+        .destination
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(t.destination.as_str());
+    if name.chars().count() > 100 || dest.chars().count() > 100 {
+        return Err(AppError::BadRequest("名称或目的地过长".into()));
+    }
+
+    let start = match &req.start_date {
+        Some(s) => parse_date(s)?,
+        None => t.start_date,
+    };
+    let end = match &req.end_date {
+        Some(s) => parse_date(s)?,
+        None => t.end_date,
+    };
+    if end < start {
+        return Err(AppError::BadRequest("结束日期不能早于开始日期".into()));
+    }
+    let days = day_count(start, end);
+    if days > 60 {
+        return Err(AppError::BadRequest("行程请控制在 60 天以内".into()));
+    }
+
+    let mut tx = state.pool.begin().await?;
+    // 缩短行程：清掉超出天数的点位（账单上的绑定会置空）
+    sqlx::query("DELETE FROM day_plan WHERE travel_id = $1 AND day_num > $2")
+        .bind(req.travel_id)
+        .bind(days)
+        .execute(&mut *tx)
+        .await?;
+
+    let remark = match &req.remark {
+        Some(s) => Some(s.trim()).filter(|x| !x.is_empty()).map(|s| s.to_string()),
+        None => t.remark.clone(),
+    };
+
+    let travel: TravelRow = sqlx::query_as(
+        r#"
+        UPDATE travel
+        SET travel_name = $2,
+            destination = $3,
+            start_date = $4,
+            end_date = $5,
+            remark = $6
+        WHERE id = $1
+        RETURNING id, travel_name, destination, start_date, end_date, invite_code,
+                  status, creator_id, is_lock, remark
+        "#,
+    )
+    .bind(req.travel_id)
+    .bind(name)
+    .bind(dest)
+    .bind(start)
+    .bind(end)
+    .bind(remark.as_deref())
+    .fetch_one(&mut *tx)
+    .await?;
+    tx.commit().await?;
+
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM travel_member WHERE travel_id = $1")
+        .bind(travel.id)
+        .fetch_one(&state.pool)
+        .await?;
+    Ok(ok(to_vo(&travel, count, 1, true, true)))
+}
+
 pub async fn list(
     State(state): State<AppState>,
     user: AuthUser,

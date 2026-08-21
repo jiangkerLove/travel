@@ -3,11 +3,6 @@
     <view class="hero">
       <view class="hero-title-row">
         <view class="hero-title">{{trip.travel_name}}</view>
-        <view
-          class="hero-edit"
-          wx:if="{{mode === 'browse' && canEdit}}"
-          bind:tap="enterEdit"
-        >去编辑</view>
       </view>
       <view class="hero-meta" wx:if="{{trip.destination}}">
         {{trip.destination}}<text wx:if="{{trip.start_date}}"> · {{trip.start_date}} – {{trip.end_date}}</text>
@@ -25,11 +20,11 @@
         markers="{{markers}}"
         polyline="{{polyline}}"
         show-location="{{false}}"
-        enable-poi="{{false}}"
+        enable-poi="{{true}}"
         enable-3D="{{false}}"
         enable-overlooking="{{false}}"
         enable-traffic="{{false}}"
-        enable-building="{{false}}"
+        enable-building="{{true}}"
         bindmarkertap="onMarker"
       />
     </view>
@@ -59,9 +54,8 @@
       <view class="tab {{tab === 'bill' ? 'on' : ''}}" bind:tap="setTab" data-v="bill">账单</view>
       <view class="tab {{tab === 'member' ? 'on' : ''}}" bind:tap="setTab" data-v="member">成员</view>
     </view>
-    <view class="edit-banner" wx:else>
-      <text wx:if="{{!routesReady}}">排点中 · 预览后看路线与用时</text>
-      <text wx:else>已预览 · 改点后需再预览</text>
+    <view class="edit-banner" wx:elif="{{!routesReady}}">
+      <text>排点中 · 预览后看路线与用时</text>
     </view>
   </view>
 
@@ -253,6 +247,28 @@
 
       <view class="mgmt-card" wx:if="{{!trip.is_sample && trip.status !== 2}}">
         <view class="mgmt-title">旅途管理</view>
+        <view
+          class="mgmt-row"
+          wx:if="{{canEdit}}"
+          bind:tap="enterEdit"
+        >
+          <view>
+            <view class="mgmt-k">排行程</view>
+            <view class="mgmt-v">添加、调整地点与路线</view>
+          </view>
+          <text class="settle-arrow">›</text>
+        </view>
+        <view
+          class="mgmt-row"
+          wx:if="{{trip.role === 1}}"
+          bind:tap="goEditTravel"
+        >
+          <view>
+            <view class="mgmt-k">修改名称与日期</view>
+            <view class="mgmt-v">可延长或缩短行程天数</view>
+          </view>
+          <text class="settle-arrow">›</text>
+        </view>
         <view class="mgmt-row last" wx:if="{{trip.role === 1 && isCreator}}" bind:tap="archive">
           <view>
             <view class="mgmt-k">归档旅途</view>

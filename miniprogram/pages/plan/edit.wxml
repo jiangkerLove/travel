@@ -65,7 +65,8 @@
         enable-scroll="{{true}}"
         enable-rotate="{{false}}"
         enable-overlooking="{{false}}"
-        enable-poi="{{false}}"
+        enable-poi="{{true}}"
+        enable-building="{{true}}"
         show-location="{{false}}"
       />
     </view>

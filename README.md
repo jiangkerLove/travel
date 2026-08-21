@@ -33,7 +33,7 @@ docker compose up -d --build
 - 对外只映射一个端口 `PORT`（默认 **8080** → gateway HTTP）
 - 外层 Nginx 把 `travel.jiangker.cn` **端口转发**到该端口即可（HTTPS 在你外层处理）
 - `api` 基于个人阿里云 `debian:…-shanghai` 构建；运行时不再 `apt-get`（证书 / wget 从 builder 拷入）
-- `gateway` 使用现成 nginx 镜像做 `/api`、`/health`、`/admin` 分流
+- `gateway` 基于现成 nginx 镜像构建（配置打进镜像，避免宿主机文件挂载踩坑）
 - 启动时自动跑数据库迁移
 
 **同域路径**

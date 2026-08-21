@@ -9,6 +9,7 @@ const api = {
   travelList: (archived = false) => request({ url: `/api/travel/list?archived=${archived}` }),
   travelDetail: (id) => request({ url: `/api/travel/detail?id=${id}` }),
   travelCreate: (data) => request({ url: '/api/travel/create', method: 'POST', data }),
+  travelUpdate: (data) => request({ url: '/api/travel/update', method: 'POST', data }),
   travelJoin: (invite_code) => request({ url: '/api/travel/join', method: 'POST', data: { invite_code } }),
   travelMember: (travel_id) => request({ url: `/api/travel/member?travel_id=${travel_id}` }),
   travelLock: (data) => request({ url: '/api/travel/lock', method: 'POST', data }),
