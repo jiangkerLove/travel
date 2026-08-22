@@ -9,6 +9,8 @@ use crate::{
 };
 
 const DEEPSEEK_URL: &str = "https://api.deepseek.com/chat/completions";
+/// DeepSeek-V4-Flash-0731。旧名 deepseek-chat 已下线。
+const DEEPSEEK_MODEL: &str = "deepseek-v4-flash";
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct AiPoint {
@@ -224,8 +226,9 @@ async fn chat_json(api_key: &str, user_content: String) -> Result<ModelOut, AppE
     );
     headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
     let body = json!({
-        "model": "deepseek-chat",
+        "model": DEEPSEEK_MODEL,
         "temperature": 0.3,
+        "thinking": { "type": "disabled" },
         "response_format": { "type": "json_object" },
         "messages": [
             {
