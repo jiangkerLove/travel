@@ -233,7 +233,7 @@ async fn chat_json(api_key: &str, user_content: String) -> Result<ModelOut, AppE
         "messages": [
             {
                 "role": "system",
-                "content": "你是旅行行程规划助手。只输出 JSON，不要解释。按用户天数把行程排到每天，地点用中国大陆可搜索的真实地名。避开用户明确不想去的地方。每天 2-5 个点，不要安排过多。point_type 只能是 sight/hotel/food/gas/transport。query 写成便于高德搜索的词，带上城市。"
+                "content": "你是旅行行程规划助手。只输出 JSON，不要解释。按游览顺序排点，地点用中国大陆景区/店铺常用名，要能被高德搜到。避开用户明确不想去的地方。每天 2-5 个点。point_type 只能是 sight/hotel/food/gas/transport。query 写成「城市 地点」。arrive 用 HH:MM。note 只写一句必要提醒，不要写攻略。"
             },
             { "role": "user", "content": user_content }
         ]
@@ -325,26 +325,43 @@ pub async fn draft_itinerary(
     existing: &str,
     prompt: &str,
     focus_day: Option<i32>,
+    recommend: bool,
 ) -> Result<AiDraft, AppError> {
     if api_key.is_empty() {
         return Err(AppError::BadRequest("未配置 DEEPSEEK_API_KEY".into()));
     }
     let prompt = prompt.trim();
-    if prompt.chars().count() < 2 {
+    if !recommend && prompt.chars().count() < 2 {
         return Err(AppError::BadRequest("请写要去哪里，或粘贴攻略链接".into()));
     }
     if prompt.chars().count() > 2000 {
         return Err(AppError::BadRequest("描述太长，精简一下再试".into()));
     }
     let links = collect_link_notes(prompt).await;
-    let scope = match focus_day {
-        Some(d) => format!(
-            "只改第 {d} 天，days 里只输出 day_num={d} 的一天。在该天现有点上按用户要求增加、删掉或微调；用户没说去掉的地点尽量保留。"
-        ),
-        None => format!("可重排全部 {days} 天。day_num 必须在 1 到 {days} 之间。"),
+    let prefer = if prompt.is_empty() {
+        "无特别偏好，按顺路、值得一看来推荐。".into()
+    } else {
+        prompt.to_string()
+    };
+    let scope = if recommend {
+        match focus_day {
+            Some(d) => format!(
+                "这是沿途推荐：只输出第 {d} 天。必须保留该天现有地点和先后顺序，在顺路或附近插入 1-2 个景点。不要删除已有点，不要大改路线。"
+            ),
+            None => format!(
+                "这是沿途推荐：输出全部有行程的天。必须保留现有地点和先后顺序，每天最多插入 1-2 个顺路或附近的景点（优先 sight）。不要删除已有点，不要重排成另一条线。day_num 必须在 1 到 {days} 之间。"
+            ),
+        }
+    } else {
+        match focus_day {
+            Some(d) => format!(
+                "只改第 {d} 天，days 里只输出 day_num={d} 的一天。在该天现有点上按用户要求增加、删掉或微调；用户没说去掉的地点尽量保留。"
+            ),
+            None => format!("可重排全部 {days} 天。day_num 必须在 1 到 {days} 之间。"),
+        }
     };
     let user_content = format!(
-        "目的地：{destination}\n日期：{start} 至 {end}，共 {days} 天\n现有行程：{existing}\n{scope}\n用户要求：{prompt}\n{links}\n请输出 JSON：{{\"summary\":\"一句话\",\"days\":[{{\"day_num\":1,\"theme\":\"\",\"points\":[{{\"place_name\":\"\",\"query\":\"城市 地点\",\"point_type\":\"sight\",\"stay_minutes\":90,\"arrive\":\"10:00\",\"note\":\"\"}}]}}]}}"
+        "目的地：{destination}\n日期：{start} 至 {end}，共 {days} 天\n现有行程（按顺序）：{existing}\n{scope}\n用户要求：{prefer}\n{links}\n请输出 JSON：{{\"summary\":\"一句话\",\"days\":[{{\"day_num\":1,\"theme\":\"\",\"points\":[{{\"place_name\":\"\",\"query\":\"城市 地点\",\"point_type\":\"sight\",\"stay_minutes\":90,\"arrive\":\"10:00\",\"note\":\"\"}}]}}]}}"
     );
     let model = chat_json(api_key, user_content).await?;
     let mut draft = AiDraft {
@@ -373,7 +390,7 @@ pub async fn draft_itinerary(
                 latitude: None,
                 found: false,
             });
-            if points.len() >= 6 {
+            if points.len() >= if recommend { 8 } else { 6 } {
                 break;
             }
         }

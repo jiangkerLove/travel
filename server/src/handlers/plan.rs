@@ -835,6 +835,7 @@ pub struct AiDraftReq {
     pub travel_id: i64,
     pub prompt: String,
     pub day_num: Option<i32>,
+    pub mode: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -887,6 +888,10 @@ pub async fn ai_draft(
         None => None,
     };
     let plans = list_plans(&state.pool, req.travel_id, None).await?;
+    let recommend = req.mode.as_deref() == Some("recommend");
+    if recommend && plans.is_empty() {
+        return Err(AppError::BadRequest("先排几个地点，再沿途推荐".into()));
+    }
     let draft = crate::ai::draft_itinerary(
         &state.deepseek_api_key,
         &state.amap_key,
@@ -898,6 +903,7 @@ pub async fn ai_draft(
         &existing_plan_brief(&plans, focus_day),
         &req.prompt,
         focus_day,
+        recommend,
     )
     .await?;
     Ok(ok(draft))
@@ -936,15 +942,11 @@ pub async fn ai_apply(
                 return Err(AppError::BadRequest("点位类型不合法".into()));
             }
             rows.push((day.day_num, p.clone()));
-            if rows.len() > 40 {
+            if rows.len() > 56 {
                 return Err(AppError::BadRequest("地点太多，精简后再保存".into()));
             }
         }
     }
-    if rows.is_empty() {
-        return Err(AppError::BadRequest("没有可保存的地点".into()));
-    }
-
     let old_ids: Vec<i64> = if let Some(day) = focus_day {
         sqlx::query_scalar("SELECT id FROM day_plan WHERE travel_id=$1 AND day_num=$2")
             .bind(req.travel_id)
@@ -984,12 +986,17 @@ pub async fn ai_apply(
         let lat = p.latitude.and_then(Decimal::from_f64);
         let arrive = parse_time(&p.arrive)?;
         let remark = p.note.as_deref().map(str::trim).filter(|s| !s.is_empty());
+        let traffic = if sort == 0 {
+            None
+        } else {
+            Some("drive".to_string())
+        };
         sqlx::query(
             r#"
             INSERT INTO day_plan (
                 travel_id, day_num, point_type, place_name, longitude, latitude,
                 arrive_time, leave_time, stay_duration, traffic_type, traffic_duration, sort, remark
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,NULL,$8,NULL,NULL,$9,$10)
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,NULL,$8,$9,NULL,$10,$11)
             "#,
         )
         .bind(req.travel_id)
@@ -1000,6 +1007,7 @@ pub async fn ai_apply(
         .bind(lat)
         .bind(arrive)
         .bind(p.stay_minutes)
+        .bind(&traffic)
         .bind(sort)
         .bind(remark)
         .execute(&mut *tx)

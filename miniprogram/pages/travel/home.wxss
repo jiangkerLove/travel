@@ -228,6 +228,18 @@ page {
   transition: max-height 0.32s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.24s ease, margin 0.32s, padding 0.32s;
 }
 
+.edit-banner.has-act {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.edit-banner-act {
+  flex-shrink: 0;
+  font-weight: 650;
+}
+
 .home.is-map-full .edit-banner {
   max-height: 0;
   opacity: 0;
