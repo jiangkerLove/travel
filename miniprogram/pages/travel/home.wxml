@@ -68,8 +68,12 @@
       <view class="tab {{tab === 'member' ? 'on' : ''}}" bind:tap="setTab" data-v="member">成员</view>
     </view>
     <view class="edit-banner has-act" wx:elif="{{aiPending}}">
-      <text class="edit-banner-txt">{{aiIntro}} · 这版不手改，改提示词让 AI 接着排</text>
-      <text class="edit-banner-act" catch:tap="openAi">改提示词</text>
+      <text class="edit-banner-txt" wx:if="{{generating}}">{{generatingHint}}</text>
+      <text class="edit-banner-txt" wx:else>{{aiIntro}} · 这版不手改，改提示词让 AI 接着排</text>
+      <text class="edit-banner-act" wx:if="{{!generating}}" catch:tap="openAi">改提示词</text>
+    </view>
+    <view class="edit-banner" wx:elif="{{generating}}">
+      <text>{{generatingHint}}</text>
     </view>
     <view class="edit-banner" wx:elif="{{!routesReady}}">
       <text>排点中 · 预览后看路线与用时</text>

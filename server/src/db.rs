@@ -347,3 +347,16 @@ pub async fn invalidate_route_cache(pool: &PgPool, plan_ids: &[i64]) {
     .execute(pool)
     .await;
 }
+
+pub async fn clear_travel_route_cache(pool: &PgPool, travel_id: i64) {
+    let _ = sqlx::query(
+        r#"
+        DELETE FROM route_cache
+        WHERE from_plan_id IN (SELECT id FROM day_plan WHERE travel_id = $1)
+           OR to_plan_id IN (SELECT id FROM day_plan WHERE travel_id = $1)
+        "#,
+    )
+    .bind(travel_id)
+    .execute(pool)
+    .await;
+}

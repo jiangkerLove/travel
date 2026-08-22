@@ -32,8 +32,8 @@ const api = {
   planMove: (data) => request({ url: '/api/plan/move', method: 'POST', data }),
   planAiDraft: (data) => request({ url: '/api/plan/ai-draft', method: 'POST', data, timeout: 60000 }),
   planAiApply: (data) => request({ url: '/api/plan/ai-apply', method: 'POST', data, timeout: 30000 }),
-  mapGlobal: (travel_id) => request({ url: `/api/map/global?travel_id=${travel_id}` }),
-  mapDay: (travel_id, day_num) => request({ url: `/api/map/day?travel_id=${travel_id}&day_num=${day_num}` }),
+  mapDay: (travel_id, day_num) => request({ url: `/api/map/day?travel_id=${travel_id}&day_num=${day_num}`, timeout: 25000 }),
+  mapGlobal: (travel_id) => request({ url: `/api/map/global?travel_id=${travel_id}`, timeout: 25000 }),
   mapSearch: (q, lng, lat) => {
     let url = `/api/map/search?q=${encodeURIComponent(q || '')}`
     if (lng && lat) url += `&lng=${lng}&lat=${lat}`

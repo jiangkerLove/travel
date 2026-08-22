@@ -148,6 +148,7 @@ Page({
     isCreator: false,
     routesReady: false,
     generating: false,
+    generatingHint: '',
     aiOpen: false,
     aiPrompt: '',
     aiLoading: false,
@@ -771,23 +772,51 @@ Page({
   },
   async generateRoutes() {
     if (this.data.generating) return
-    const hasAny = (this.data.days || []).some((d) => (d.plans || []).length)
+    const days = this.data.days || []
+    const hasAny = days.some((d) => (d.plans || []).length)
     if (!hasAny) {
       wx.showToast({ title: '先排几个地点', icon: 'none' })
       return
     }
-    this.setData({ generating: true })
-    wx.showLoading({ title: '预览行程中', mask: true })
+    const prevScope = this.data.mapScope
+    const prevIndex = this.data.dayIndex
+    this.setData({ generating: true, generatingHint: '正在生成路书', routesReady: true })
     try {
       this._mapCache = null
       this._mapDrawKey = ''
+      for (let i = 0; i < days.length; i++) {
+        const day = days[i]
+        if (!(day.plans || []).length) continue
+        this.setData({
+          generatingHint: `正在生成 D${day.day_num} 路书`,
+          mapScope: 'day',
+          dayIndex: i,
+          currentDay: day,
+        })
+        this._mapCache = null
+        this._mapDrawKey = ''
+        await this.renderMap({ fit: true })
+      }
       await this.loadPlans({ withRoutes: true })
+      if (prevScope === 'all') {
+        this.setData({ mapScope: 'all', dayIndex: -1 })
+      } else {
+        const idx = Math.min(Math.max(prevIndex, 0), (this.data.days || []).length - 1)
+        this.setData({
+          mapScope: 'day',
+          dayIndex: idx,
+          currentDay: (this.data.days || [])[idx] || { plans: [] },
+        })
+      }
+      this._mapCache = null
+      this._mapDrawKey = ''
+      await this.renderMap({ fit: true })
+      getApp().markTripsDirty && getApp().markTripsDirty()
       wx.showToast({ title: '预览完成', icon: 'success' })
     } catch (e) {
       wx.showToast({ title: (e && e.message) || '预览失败', icon: 'none' })
     } finally {
-      this.setData({ generating: false })
-      wx.hideLoading()
+      this.setData({ generating: false, generatingHint: '' })
     }
   },
   async finishEdit() {
@@ -806,6 +835,7 @@ Page({
       this.setData({ mode: 'browse', tab: 'plan', routesReady: true, aiEntry: false, aiOpen: false })
       wx.setNavigationBarTitle({ title: this.data.trip.travel_name || '旅途' })
       await this.renderMap({ fit: false })
+      getApp().markTripsDirty && getApp().markTripsDirty()
     } catch (e) {
       wx.showToast({ title: (e && e.message) || '保存失败', icon: 'none' })
     } finally {
@@ -816,6 +846,7 @@ Page({
   keepAi() {
     this._aiBackup = null
     this.setData({ aiPending: false, aiEntry: false, aiIntro: '' })
+    getApp().markTripsDirty && getApp().markTripsDirty()
     wx.showToast({ title: '已保存', icon: 'success' })
   },
   openAi({ all } = {}) {

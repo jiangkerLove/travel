@@ -27,6 +27,13 @@ function coverOptions() {
   ]
 }
 
+function hashStr(s) {
+  let h = 0
+  const str = String(s || '')
+  for (let i = 0; i < str.length; i++) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0
+  return (h >>> 0).toString(36)
+}
+
 function cardThumb(t) {
   const cover = t.cover || ROUTE_KEY
   if (cover !== ROUTE_KEY) return illustSrc(cover)
@@ -34,7 +41,7 @@ function cardThumb(t) {
   if (!svg) return illustSrc(ROUTE_KEY)
   try {
     const fs = wx.getFileSystemManager()
-    const path = `${wx.env.USER_DATA_PATH}/route-${t.id}.svg`
+    const path = `${wx.env.USER_DATA_PATH}/route-${t.id}-${hashStr(svg)}.svg`
     fs.writeFileSync(path, svg, 'utf8')
     return path
   } catch (e) {

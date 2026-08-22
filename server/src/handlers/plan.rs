@@ -8,8 +8,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     db::{
-        find_travel, invalidate_route_cache, list_plans, load_route_cache, require_editor, require_member,
-        save_route_cache, PlanRow,
+        clear_travel_route_cache, find_travel, invalidate_route_cache, list_plans, load_route_cache,
+        require_editor, require_member, save_route_cache, PlanRow,
     },
     error::{ok, ApiOk, AppError},
     route::{plan_route, LatLng},
@@ -444,7 +444,8 @@ pub async fn list(
             .filter(|p| p.day_num == day_num)
             .map(to_vo)
             .collect();
-        if want_routes {
+        let in_range = range.contains(&day_num);
+        if want_routes && in_range {
             let lines = with_routes(
                 &state.pool,
                 &state.amap_key,
@@ -464,7 +465,7 @@ pub async fn list(
             _ => false,
         };
         let (start_from, start_distance_m, start_duration_s) =
-            if duplicated || prev_last.is_none() {
+            if !in_range || duplicated || prev_last.is_none() {
                 (None, None, None)
             } else {
                 let start = prev_last.as_ref().map(|p| StartFromVo {
@@ -964,6 +965,9 @@ pub async fn ai_apply(
             .await?
     };
 
+    if focus_day.is_none() {
+        clear_travel_route_cache(&state.pool, req.travel_id).await;
+    }
     let mut tx = state.pool.begin().await?;
     if let Some(day) = focus_day {
         sqlx::query("DELETE FROM day_plan WHERE travel_id=$1 AND day_num=$2")
