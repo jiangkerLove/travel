@@ -174,11 +174,93 @@ fn finish_day_end(p: &mut AiPoint, is_trip_last_day: bool) {
     }
 }
 
+const SYSTEM_ROLE: &str = "你是资深自驾游与自由行行程规划师，熟悉中国路况与景区分布。只输出 JSON，不要 markdown，不要解释。";
+
+const OUTPUT_FORMAT: &str = "\
+【输出格式】place_name 用高德能搜到的常用地名；query 写成「城市 景点或区县」辅助定位；point_type 仅 sight/hotel/food/gas/transport；每天 3-6 个点（含过夜点）；arrive 用 HH:MM，随路程先后递增；stay_minutes 合理估算游览时长；note 只写一句必要提醒（门票/预约/路况/最佳时段），不写酒店名；summary 用一两句话说明整趟或当天怎么走；theme 写当天一句话主题。";
+
+const PLANNING_METHOD: &str = "\
+【规划步骤】先按天划定活动范围并确定当晚住宿镇/县 → 再选当天顺路可达的景区 → 按动线从早到晚排点 → 自检是否折返或重复地名 → 最后填 arrive 与 stay_minutes。全程住宿地尽量少换，整体路线向前推进。";
+
 const OVERNIGHT_RULE: &str = "\
-每天收尾必须是当晚能住下的镇、乡、村或县城，只写地名（如日隆镇），point_type=hotel。不要写具体酒店/民宿店名，不要用景区收尾。\
-相邻两点必须是不同地方：不要连续出现同一地点，也不要「先在这个镇玩、再在这个镇住」。古镇、镇区、同名镇算同一个地方，例如不要「日隆古镇」后面再跟「日隆镇」，不要「喜洲」后面再跟「喜洲镇」。\
-如果当天主要就在某个镇上活动，这个镇只出现一次，并且放在当天最后当作过夜点；前面只排附近真正的景区，不要把镇本身再列成游览点。\
-最后一天若返程，最后一个点可以是机场或车站（point_type=transport）。";
+【过夜】每天最后一个点必须是能过夜的镇、乡、村或县城，place_name 只写地名（如日隆镇、塔河县），point_type=hotel。不写具体酒店/民宿名。不用景区、山顶、观景台收尾。最后一天若返程，末点可为机场或车站（point_type=transport）。";
+
+const PLACE_DEDUP_RULE: &str = "\
+【去重】每个地点在当天只出现一次。相邻两点不能是同一地方，禁止连续两个完全相同地名（如两个「塔河县」）。古镇/镇/古城算同一地，不要「日隆古镇」后又排「日隆镇」。若当天在某镇活动，该镇只作最后过夜点，前面不把该镇当景点重复列出。";
+
+const ROUTE_ORDER_RULE: &str = "\
+【顺路】每天的点按实际驾车动线从早到晚串联，一路走向当晚住宿地，避免折返和走回头路。排点前在脑中画路线：每去下一个点应比折回去更近住宿地方向，不要出现「东→西→再东」「A→B→又回到 A 附近」的走法。路上风景、观景台也可作游览点，不必套用固定时段模板，早中晚按路程与景点特点合理安排即可。summary 可简要说明当天动线方向（如「一路向北」「沿国道 318 西行」）。";
+
+const CROSS_DAY_RULE: &str = "\
+【跨天】今天在哪过夜，明天默认从那里出发；下一天第一个点应是新的游览目的地，不要重复昨夜住宿地名。相邻两天的活动区域宜向前推进，不要把后一天的点安排在需要折返回昨天路过区域的地方。";
+
+fn system_prompt() -> String {
+    [
+        SYSTEM_ROLE,
+        OUTPUT_FORMAT,
+        PLANNING_METHOD,
+        OVERNIGHT_RULE,
+        PLACE_DEDUP_RULE,
+        ROUTE_ORDER_RULE,
+        CROSS_DAY_RULE,
+    ]
+    .concat()
+}
+
+/// 地名完全相同，或高德查到的坐标几乎重合
+fn same_geocoded_stop(a: &AiPoint, b: &AiPoint) -> bool {
+    if a.place_name.trim() == b.place_name.trim() {
+        return true;
+    }
+    match (a.latitude, a.longitude, b.latitude, b.longitude) {
+        (Some(lat1), Some(lng1), Some(lat2), Some(lng2)) => {
+            let key = |lat: f64, lng: f64| ((lat * 1e5).round() as i64, (lng * 1e5).round() as i64);
+            key(lat1, lng1) == key(lat2, lng2)
+        }
+        _ => false,
+    }
+}
+
+/// 合并备注，去重相同内容
+fn merge_notes(a: Option<&str>, b: Option<&str>) -> Option<String> {
+    let mut parts: Vec<&str> = Vec::new();
+    for n in [a, b] {
+        if let Some(s) = n.map(str::trim).filter(|s| !s.is_empty()) {
+            if !parts.iter().any(|p| *p == s) {
+                parts.push(s);
+            }
+        }
+    }
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join("；"))
+    }
+}
+
+/// 高德查点之后，去掉紧挨着的完全重复节点
+fn dedupe_adjacent_after_geocode(points: &mut Vec<AiPoint>) {
+    let mut i = 0;
+    while i + 1 < points.len() {
+        if !same_geocoded_stop(&points[i], &points[i + 1]) {
+            i += 1;
+            continue;
+        }
+        let remove = if points[i + 1].point_type == "hotel" {
+            i
+        } else if points[i].point_type == "hotel" {
+            i + 1
+        } else {
+            i
+        };
+        let keep = if remove == i { i + 1 } else { i };
+        let keep_note = points[keep].note.clone();
+        let drop_note = points[remove].note.clone();
+        points[keep].note = merge_notes(keep_note.as_deref(), drop_note.as_deref());
+        points.remove(remove);
+        i = i.saturating_sub(1);
+    }
+}
 
 fn extract_urls(text: &str) -> Vec<String> {
     let mut out = Vec::new();
@@ -309,9 +391,7 @@ async fn chat_json(api_key: &str, user_content: String) -> Result<ModelOut, AppE
         "messages": [
             {
                 "role": "system",
-                "content": format!(
-                    "你是旅行行程规划助手。只输出 JSON，不要解释。按游览顺序排点，地点用中国大陆常用名，要能被高德搜到。避开用户明确不想去的地方。每天 3-6 个点（含收尾过夜点）。point_type 只能是 sight/hotel/food/gas/transport。query 写成「城市 地点」。arrive 用 HH:MM。note 只写一句必要提醒。summary 写给人看的介绍：排全程就用一两句话讲整趟怎么走，只改一天就介绍这一天。theme 也写当天一句话介绍。{OVERNIGHT_RULE}"
-                )
+                "content": system_prompt()
             },
             { "role": "user", "content": user_content }
         ]
@@ -421,16 +501,20 @@ pub async fn draft_itinerary(
     }
     let links = collect_link_notes(prompt).await;
     let prefer = if prompt.is_empty() {
-        "无特别偏好，按顺路、值得一看来推荐。".into()
+        "无特别偏好：选经典顺路景点，节奏适中，每天车程不宜过长。".into()
     } else {
         prompt.to_string()
     };
     let (existing_line, scope) = if fresh {
         (
-            "无。这是第一版，必须按用户要求全新规划，不要沿用、模仿或复用任何已有地点。".into(),
+            "无（全新规划，不得沿用或模仿任何旧地点）。".into(),
             match focus_day {
-                Some(d) => format!("只排第 {d} 天。从零安排，不要参考旧行程。"),
-                None => format!("从零重排全部 {days} 天。day_num 必须在 1 到 {days} 之间。不要参考旧行程。"),
+                Some(d) => format!(
+                    "【任务】从零规划第 {d} 天。结合目的地与总天数，安排顺路景点并以镇/县过夜收尾。只输出第 {d} 天。"
+                ),
+                None => format!(
+                    "【任务】从零规划全部 {days} 天。day_num 从 1 到 {days}，每天顺路串联、以镇/县过夜，整体路线连贯向前。避开用户不想去的地方。"
+                ),
             },
         )
     } else if recommend {
@@ -438,10 +522,10 @@ pub async fn draft_itinerary(
             existing.to_string(),
             match focus_day {
                 Some(d) => format!(
-                    "沿途推荐，只改第 {d} 天：整体路线不能改，必须原样保留该天已有地点和先后顺序。只在现有点附近、顺路插入 1-2 个真正的景区，插在当天过夜点之前。不要插入与已有点同名或同属一个镇的地点（例如已有日隆镇就不要再加日隆古镇）。不要删点、不要换顺序、不要换成另一条线。"
+                    "【任务】沿途推荐，只改第 {d} 天。必须原样保留该天已有地点及先后顺序，不得删点、换序、改线。只在相邻两点之间的顺路方向上插入 1-2 个新景区，插在当天过夜点之前。新点须与已有点不同地、不同镇，不插同名或同镇点（如已有日隆镇则不加日隆古镇）。只输出第 {d} 天。"
                 ),
                 None => format!(
-                    "沿途推荐：整体路线不能改，必须原样保留每天已有地点和先后顺序。只在现有点附近、顺路插入真正的景区，每天最多 1-2 个，插在当天过夜点之前。不要插入与已有点同名或同属一个镇的地点。不要删点、不要换顺序、不要重排。day_num 必须在 1 到 {days} 之间。"
+                    "【任务】沿途推荐。必须原样保留每天已有地点及先后顺序，不得删点、换序、重排。只在现有路线顺路方向每天插入 1-2 个新景区，插在过夜点之前。新点不得与已有点同名或同镇。day_num 从 1 到 {days}。"
                 ),
             },
         )
@@ -450,16 +534,17 @@ pub async fn draft_itinerary(
             existing.to_string(),
             match focus_day {
                 Some(d) => format!(
-                    "基于上一版 AI 行程改第 {d} 天。按用户要求增删或调整；没提到的地点尽量保留。"
+                    "【任务】在上一版基础上改第 {d} 天。按用户要求增删或调整；未提及的地点尽量保留。改完后当天仍须顺路、以镇/县过夜，并自检无重复地名与折返。只输出第 {d} 天。"
                 ),
                 None => format!(
-                    "基于上一版 AI 行程调整全部天数。按用户要求改；没提到的可保留。day_num 必须在 1 到 {days} 之间。"
+                    "【任务】在上一版基础上调整全部 {days} 天。按用户要求修改；未提及的可保留。改完后每天须顺路、以镇/县过夜，并自检无重复地名与折返。day_num 从 1 到 {days}。"
                 ),
             },
         )
     };
     let user_content = format!(
-        "目的地：{destination}\n日期：{start} 至 {end}，共 {days} 天\n现有行程（按顺序）：{existing_line}\n{scope}\n硬性规则：{OVERNIGHT_RULE}\n用户要求：{prefer}\n{links}\n请输出 JSON：{{\"summary\":\"一句话\",\"days\":[{{\"day_num\":1,\"theme\":\"\",\"points\":[{{\"place_name\":\"\",\"query\":\"城市 地点\",\"point_type\":\"sight\",\"stay_minutes\":90,\"arrive\":\"10:00\",\"note\":\"\"}}]}}]}}"
+        "目的地：{destination}\n出行日期：{start} 至 {end}，共 {days} 天\n现有行程（按顺序）：{existing_line}\n{scope}\n用户要求：{prefer}\n{links}\
+请严格遵守系统规则（过夜、去重、顺路、跨天）。输出 JSON：{{\"summary\":\"\",\"days\":[{{\"day_num\":1,\"theme\":\"\",\"points\":[{{\"place_name\":\"\",\"query\":\"城市 地点\",\"point_type\":\"sight\",\"stay_minutes\":90,\"arrive\":\"09:00\",\"note\":\"\"}}]}}]}}"
     );
     let model = chat_json(api_key, user_content).await?;
     let mut draft = AiDraft {
@@ -520,6 +605,7 @@ pub async fn draft_itinerary(
         for p in &mut day.points {
             geocode_point(amap_key, amap_secret, destination, p).await;
         }
+        dedupe_adjacent_after_geocode(&mut day.points);
     }
     Ok(draft)
 }

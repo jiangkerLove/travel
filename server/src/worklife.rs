@@ -403,6 +403,42 @@ fn break_countdown(now: NaiveDateTime) -> ExtraRow {
     }
 }
 
+fn next_spring_festival(from: NaiveDate) -> Option<Break> {
+    for y in from.year()..=from.year() + 2 {
+        for h in generate_year_breaks(y) {
+            if h.name == "春节" && h.end >= from {
+                return Some(h);
+            }
+        }
+    }
+    None
+}
+
+fn spring_festival_row(today: NaiveDate) -> Option<ExtraRow> {
+    let sf = next_spring_festival(today)?;
+    if today >= sf.start && today <= sf.end {
+        let left = diff_days(today, sf.end) + 1;
+        return Some(ExtraRow {
+            k: "春节假期".into(),
+            v: format!("还有 {} 天", left),
+        });
+    }
+    if today > sf.end {
+        return None;
+    }
+    let days_until = diff_days(today, sf.start);
+    let span = count_span(today, sf.start);
+    Some(ExtraRow {
+        k: "离春节".into(),
+        v: format!(
+            "还有 {} 天 · 上班 {} 天 · 放假 {} 天",
+            days_until,
+            format_days(span.work),
+            format_days(span.rest),
+        ),
+    })
+}
+
 fn span_hint(now: NaiveDateTime, start: NaiveDate, end: NaiveDate, name: &str) -> String {
     let today = now.date();
     if today >= start && today <= end {
@@ -656,13 +692,17 @@ pub fn build_work_life(
     let holiday = next_holiday(now);
     let retire = retirement_of(birth, gender, female_role);
     if today >= retire.date {
+        let mut extras = Vec::new();
+        if let Some(row) = spring_festival_row(today) {
+            extras.push(row);
+        }
         return Some(WorkLifeVo {
             ready: true,
             retired: true,
             age,
             gender_text,
             holiday,
-            extras: vec![],
+            extras,
             retire_age_text: retire.age_text,
             retire_date_text: retire.date_text,
             rest_text: "0 天".into(),
@@ -695,20 +735,8 @@ pub fn build_work_life(
             ),
         });
     }
-    if !same_year {
-        if let Some((a, b)) =
-            clamp_range(today, retire.date, ymd(retire.date.year(), 1, 1), ymd(retire.date.year() + 1, 1, 1))
-        {
-            let span = count_span(a, b);
-            extras.push(ExtraRow {
-                k: format!("{} 年退休前", retire.date.year()),
-                v: format!(
-                    "上班 {} 天 · 放假 {} 天",
-                    format_days(span.work),
-                    format_days(span.rest)
-                ),
-            });
-        }
+    if let Some(row) = spring_festival_row(today) {
+        extras.push(row);
     }
     extras.push(ExtraRow {
         k: "距离退休".into(),

@@ -106,7 +106,7 @@
                   <view class="plan-name">{{p.place_name}}</view>
                   <view class="plan-type">{{p.typeLabel}}</view>
                 </view>
-                <view class="plan-leg" wx:if="{{p.arriveText}}">到这里 · {{p.arriveText}}</view>
+                <view class="plan-leg" wx:if="{{p.arriveText}}">{{p.arriveText}}</view>
               </view>
             </view>
           </view>
@@ -153,7 +153,7 @@
                 <view class="plan-type">{{item.typeLabel}}</view>
               </view>
               <view class="plan-sub" wx:if="{{index === 0 && !currentDay.startFrom && !item.latitude}}">还没标坐标</view>
-              <view class="plan-leg" wx:if="{{item.arriveText && (index > 0 || currentDay.startFrom)}}">到这里 · {{item.arriveText}}</view>
+              <view class="plan-leg" wx:if="{{item.arriveText && (index > 0 || currentDay.startFrom)}}">{{item.arriveText}}</view>
               <view class="plan-tip" wx:if="{{item.remark}}">{{item.remark}}</view>
             </view>
             <view

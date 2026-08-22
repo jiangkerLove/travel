@@ -305,7 +305,7 @@ Page({
       this.setData({ routesReady: this.scopeHasCachedRoutes() })
     }
   },
-  async loadEditRouteCaches() {
+  async loadEditRouteCaches({ render, fit } = {}) {
     if (this.data.mode !== 'edit') return
     this._dayRoutes = {}
     const days = this.data.days || []
@@ -322,6 +322,7 @@ Page({
       } catch (e) { /* ignore */ }
     }
     this.setData({ routesReady: this.scopeHasCachedRoutes() })
+    if (render) await this.renderMap({ fit: !!fit })
   },
   async ensureDetailRoutes() {
     if (this.data.mode !== 'browse') return
@@ -407,8 +408,9 @@ Page({
     })
     if (this.data.tab === 'plan' || this.data.mode === 'edit') {
       if (this.data.mode === 'edit') {
-        await this.loadPlans({ withRoutes: false })
+        await this.loadPlans({ withRoutes: false, skipMap: true })
         await this.loadEditRouteCaches()
+        await this.renderMap({ fit: !this._mapFitted })
       } else {
         await this.loadPlans()
       }
@@ -571,12 +573,13 @@ Page({
     }
     tick()
   },
-  applyMapMarkers(showLegs) {
+  applyMapMarkers(showLegs = this.data.mapExpanded) {
     const cache = this._mapCache
     if (!cache || !cache.points) return
     const markers = toMarkers(cache.points, {
       markStart: cache.markStart,
       lines: cache.lines,
+      startHint: cache.startHint || '',
       showLegs,
     })
     cache.markers = markers
@@ -608,9 +611,11 @@ Page({
       if (acc.points.length) {
         const filled = fillLineRoutes(acc.lines, acc.points, { sketch: false })
         const markStart = scope !== 'all'
+        const startHint = (day && day.startHint) || ''
         const markers = toMarkers(acc.points, {
           markStart,
           lines: filled.lines,
+          startHint,
           showLegs: this.data.mapExpanded,
         })
         const polyline = linesToPolyline(filled.lines, acc.points)
@@ -622,6 +627,7 @@ Page({
           points: acc.points,
           lines: filled.lines,
           markStart,
+          startHint,
         }
         if (seq !== this._mapSeq) return
         this.setMapView(markers, polyline)
@@ -665,8 +671,8 @@ Page({
     }
 
     if (!withLines) {
-      const markers = toMarkers(localGeo, { markStart, showLegs: this.data.mapExpanded })
-      this._mapCache = { key: cacheKey, markers, polyline: [], points: localGeo, lines: [], markStart }
+      const markers = toMarkers(localGeo, { markStart })
+      this._mapCache = { key: cacheKey, markers, polyline: [], points: localGeo, lines: [], markStart, startHint: '' }
       this.setMapView(markers, [])
       if (fit) this.fitMap(localGeo)
       return
@@ -702,16 +708,22 @@ Page({
         const filled = fillLineRoutes(data.lines || [], points)
         lines = filled.lines
       }
-      const markers = toMarkers(points, { markStart, lines, showLegs: this.data.mapExpanded })
+      const startHint = scope !== 'all' && day ? (day.startHint || '') : ''
+      const markers = toMarkers(points, {
+        markStart,
+        lines,
+        startHint,
+        showLegs: this.data.mapExpanded,
+      })
       const polyline = linesToPolyline(lines, points)
-      this._mapCache = { key: cacheKey, markers, polyline, points, lines, markStart }
+      this._mapCache = { key: cacheKey, markers, polyline, points, lines, markStart, startHint }
       if (seq !== this._mapSeq) return
       this.setMapView(markers, polyline)
       if (fit) this.fitMap(points)
     } catch (e) {
       if (seq !== this._mapSeq) return
-      const markers = toMarkers(localGeo, { markStart, showLegs: this.data.mapExpanded })
-      this._mapCache = { key: cacheKey, markers, polyline: [], points: localGeo, lines: [], markStart }
+      const markers = toMarkers(localGeo, { markStart })
+      this._mapCache = { key: cacheKey, markers, polyline: [], points: localGeo, lines: [], markStart, startHint: '' }
       this.setMapView(markers, [])
       if (fit) this.fitMap(localGeo)
     }
@@ -974,6 +986,7 @@ Page({
       points: acc.points,
       lines: acc.lines,
       markStart: true,
+      startHint: '',
     }
     this.setMapView(markers, polyline)
     if (fit && acc.points.length) this.fitMap(acc.points)
@@ -1025,7 +1038,13 @@ Page({
         points[0] = { ...points[0], isStart: true }
       }
       const filled = fillLineRoutes(navLines(data.lines), points, { sketch: false })
-      const markers = toMarkers(points, { markStart: true, lines: filled.lines, showLegs: this.data.mapExpanded })
+      const startHint = day.startHint || formatLegHint(data.start_distance_m, data.start_duration_s)
+      const markers = toMarkers(points, {
+        markStart: true,
+        lines: filled.lines,
+        startHint,
+        showLegs: this.data.mapExpanded,
+      })
       const polyline = linesToPolyline(filled.lines, points)
       this._mapCache = {
         key: `spread3:day:${day.day_num}:1:${(day.plans || []).map((p) => p.id).join(',')}`,
@@ -1034,6 +1053,7 @@ Page({
         points,
         lines: filled.lines,
         markStart: true,
+        startHint,
       }
       this.setMapView(markers, polyline)
       this.fitMap(points)
@@ -1219,9 +1239,8 @@ Page({
       this._mapDrawKey = ''
       this.setData({ aiOpen: false, aiPending: false, aiEntry: false, aiIntro: '' })
       this.invalidateDayRoutes()
-      await this.loadPlans({ withRoutes: false })
-      await this.loadEditRouteCaches()
-      await this.renderMap({ fit: false })
+      await this.loadPlans({ withRoutes: false, skipMap: true })
+      await this.loadEditRouteCaches({ render: true })
       wx.showToast({ title: '已取消', icon: 'none' })
     } catch (e) {
       wx.showToast({ title: (e && e.message) || '取消失败', icon: 'none' })
@@ -1296,7 +1315,6 @@ Page({
   },
   onMarker(e) {
     const markerId = e.detail.markerId
-    if (Number(markerId) >= 900000000) return
     const all = (this.data.days || []).flatMap((d) => d.plans || [])
     const p = all.find((i) => i.id === markerId)
     if (!p) return
