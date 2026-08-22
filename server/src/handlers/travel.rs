@@ -443,9 +443,18 @@ pub async fn list(
 
 #[derive(sqlx::FromRow)]
 struct RoutePtRow {
+    id: i64,
     travel_id: i64,
     latitude: rust_decimal::Decimal,
     longitude: rust_decimal::Decimal,
+}
+
+#[derive(sqlx::FromRow)]
+struct RouteLegRow {
+    travel_id: i64,
+    from_plan_id: i64,
+    to_plan_id: i64,
+    points: sqlx::types::Json<Vec<crate::route::LatLng>>,
 }
 
 async fn load_route_thumbs(
@@ -458,7 +467,7 @@ async fn load_route_thumbs(
     }
     let rows: Vec<RoutePtRow> = match sqlx::query_as(
         r#"
-        SELECT travel_id, latitude, longitude
+        SELECT id, travel_id, latitude, longitude
         FROM day_plan
         WHERE travel_id = ANY($1)
           AND latitude IS NOT NULL
@@ -476,18 +485,41 @@ async fn load_route_thumbs(
             return map;
         }
     };
-    let mut grouped: std::collections::HashMap<i64, Vec<(f64, f64)>> =
+    let legs: Vec<RouteLegRow> = sqlx::query_as(
+        r#"
+        SELECT p.travel_id, c.from_plan_id, c.to_plan_id, c.points
+        FROM route_cache c
+        JOIN day_plan p ON p.id = c.from_plan_id
+        WHERE p.travel_id = ANY($1)
+        "#,
+    )
+    .bind(ids)
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+
+    let mut grouped: std::collections::HashMap<i64, Vec<(i64, f64, f64)>> =
         std::collections::HashMap::new();
     for r in rows {
         if let (Some(lat), Some(lng)) = (
             crate::util::opt_coord_to_f64(Some(r.latitude)),
             crate::util::opt_coord_to_f64(Some(r.longitude)),
         ) {
-            grouped.entry(r.travel_id).or_default().push((lat, lng));
+            grouped.entry(r.travel_id).or_default().push((r.id, lat, lng));
         }
     }
-    for (id, pts) in grouped {
-        if let Some(svg) = crate::route_thumb::from_coords(&pts) {
+    let mut legs_by_travel: std::collections::HashMap<i64, Vec<(i64, i64, Vec<crate::route::LatLng>)>> =
+        std::collections::HashMap::new();
+    for leg in legs {
+        legs_by_travel
+            .entry(leg.travel_id)
+            .or_default()
+            .push((leg.from_plan_id, leg.to_plan_id, leg.points.0));
+    }
+    for (id, stops) in grouped {
+        let coords: Vec<(f64, f64)> = stops.iter().map(|s| (s.1, s.2)).collect();
+        let path = crate::route_thumb::stitch_path(&stops, legs_by_travel.get(&id).unwrap_or(&vec![]));
+        if let Some(svg) = crate::route_thumb::from_trip(&coords, &path) {
             map.insert(id, svg);
         }
     }
