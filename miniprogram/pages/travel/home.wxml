@@ -308,7 +308,8 @@
   <view class="edit-bar" wx:elif="{{mode === 'edit'}}">
     <view class="edit-bar-btn ai" bind:tap="openAi">AI 排程</view>
     <view class="edit-bar-btn add" bind:tap="quickAddEnd">＋ 地点</view>
-    <view class="edit-bar-btn ghost" bind:tap="generateRoutes">{{routesReady ? '重预览' : '预览'}}</view>
+    <view class="edit-bar-btn ghost" wx:if="{{mapScope === 'all'}}" bind:tap="previewAll">预览全程</view>
+    <view class="edit-bar-btn ghost" wx:else bind:tap="previewDay">{{routesReady ? '重预览' : '预览'}}</view>
     <view class="edit-bar-btn main" bind:tap="finishEdit">完成</view>
   </view>
 

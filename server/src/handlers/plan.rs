@@ -44,6 +44,8 @@ pub struct ListQ {
     pub day_num: Option<i32>,
     /// 为 0 时跳过路书计算，仅返回排程点位（编辑态用）
     pub routes: Option<i16>,
+    /// 为 1 时忽略已有路书缓存，重新向高德要当天路线
+    pub fresh: Option<i16>,
 }
 
 #[derive(Deserialize)]
@@ -223,7 +225,13 @@ fn build_lines(points: &[PlanVo]) -> Vec<MapLineVo> {
     lines
 }
 
-async fn with_routes(pool: &sqlx::PgPool, key: &str, sk: &str, points: &[PlanVo]) -> Vec<MapLineVo> {
+async fn with_routes(
+    pool: &sqlx::PgPool,
+    key: &str,
+    sk: &str,
+    points: &[PlanVo],
+    force: bool,
+) -> Vec<MapLineVo> {
     let mut lines = build_lines(points);
     for line in &mut lines {
         let Some(a) = points.iter().find(|p| p.id == line.from_id) else {
@@ -237,17 +245,19 @@ async fn with_routes(pool: &sqlx::PgPool, key: &str, sk: &str, points: &[PlanVo]
         let to_lat = b.latitude.unwrap_or(0.0);
         let to_lng = b.longitude.unwrap_or(0.0);
         let traffic = b.traffic_type.as_deref();
-        if let Some((mode, pts, from_nav, distance_m, duration_s)) = load_route_cache(
-            pool, a.id, b.id, traffic, from_lat, from_lng, to_lat, to_lng,
-        )
-        .await
-        {
-            line.mode = mode;
-            line.points = pts;
-            line.from_nav = from_nav;
-            line.distance_m = distance_m;
-            line.duration_s = duration_s;
-            continue;
+        if !force {
+            if let Some((mode, pts, from_nav, distance_m, duration_s)) = load_route_cache(
+                pool, a.id, b.id, traffic, from_lat, from_lng, to_lat, to_lng,
+            )
+            .await
+            {
+                line.mode = mode;
+                line.points = pts;
+                line.from_nav = from_nav;
+                line.distance_m = distance_m;
+                line.duration_s = duration_s;
+                continue;
+            }
         }
         let result = plan_route(key, sk, traffic, from_lat, from_lng, to_lat, to_lng).await;
         line.mode = result.mode;
@@ -451,6 +461,7 @@ pub async fn list(
                 &state.amap_key,
                 &state.amap_secret,
                 &day_plans,
+                false,
             )
             .await;
             for p in &mut day_plans {
@@ -486,6 +497,7 @@ pub async fn list(
                             &state.amap_key,
                             &state.amap_secret,
                             &pair,
+                            false,
                         )
                         .await;
                         if let Some(line) = cross.first() {
@@ -771,7 +783,7 @@ pub async fn map_global(
     require_member(&state.pool, q.travel_id, user.id).await?;
     let plans = list_plans(&state.pool, q.travel_id, None).await?;
     let points: Vec<PlanVo> = plans.iter().map(to_vo).collect();
-    let lines = with_routes(&state.pool, &state.amap_key, &state.amap_secret, &points).await;
+    let lines = with_routes(&state.pool, &state.amap_key, &state.amap_secret, &points, false).await;
     Ok(ok(MapVo { points, lines }))
 }
 
@@ -802,7 +814,12 @@ pub async fn map_day(
         }
     }
 
-    let lines = with_routes(&state.pool, &state.amap_key, &state.amap_secret, &points).await;
+    let force = q.fresh.unwrap_or(0) != 0;
+    if force {
+        let ids: Vec<i64> = points.iter().map(|p| p.id).collect();
+        invalidate_route_cache(&state.pool, &ids).await;
+    }
+    let lines = with_routes(&state.pool, &state.amap_key, &state.amap_secret, &points, force).await;
     Ok(ok(MapVo { points, lines }))
 }
 
