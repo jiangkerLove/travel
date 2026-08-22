@@ -538,6 +538,10 @@ Page({
     }
   },
   openFormAdd() {
+    if (this.data.aiPending) {
+      wx.showToast({ title: '先改提示词，让 AI 接着排', icon: 'none' })
+      return
+    }
     const days = this.data.days || []
     let dayNum = (this.data.currentDay && this.data.currentDay.day_num) || 1
     if (this.data.mapScope === 'all') {
@@ -546,6 +550,10 @@ Page({
     this.openPlanEdit({ day_num: dayNum })
   },
   openPlanEdit({ day_num, id, plan } = {}) {
+    if (this.data.aiPending) {
+      wx.showToast({ title: '这版先别手改，改提示词让 AI 接着排', icon: 'none' })
+      return
+    }
     if (!this.data.canEdit) {
       wx.showToast({ title: '没有改行程权限', icon: 'none' })
       return
@@ -569,6 +577,10 @@ Page({
     })
   },
   quickAddEnd() {
+    if (this.data.aiPending) {
+      wx.showToast({ title: '先改提示词，让 AI 接着排', icon: 'none' })
+      return
+    }
     if (this.data.mode !== 'edit' || !this.data.canEdit) {
       wx.showToast({ title: '没有改行程权限', icon: 'none' })
       return
@@ -631,6 +643,7 @@ Page({
   editPlan(e) {
     if (this._justDragged) return
     const id = e.currentTarget.dataset.id
+    if (this.data.aiPending) return
     if (this.data.mode === 'edit' && this.data.canEdit) {
       this.openPlanEdit({ id })
       return
@@ -640,6 +653,7 @@ Page({
     if (p) openMap(p)
   },
   onMorePlan(e) {
+    if (this.data.aiPending) return
     if (this.data.mode !== 'edit' || !this.data.canEdit) return
     if (this.data.mapScope === 'all') {
       wx.showToast({ title: '请先切到具体某一天', icon: 'none' })
@@ -696,6 +710,7 @@ Page({
     }
   },
   onDragStart(e) {
+    if (this.data.aiPending) return
     if (this.data.mode !== 'edit' || !this.data.canEdit || this.data.mapScope === 'all') return
     const from = Number(e.currentTarget.dataset.index)
     this._drag = {
@@ -896,25 +911,6 @@ Page({
       wx.showToast({ title: '先排几个地点，再沿途推荐', icon: 'none' })
       return
     }
-    if (hasOld) {
-      const ok = await new Promise((resolve) => {
-        wx.showModal({
-          title: recommend
-            ? (dayNum ? `给 D${dayNum} 沿途加点？` : '沿途推荐景点？')
-            : (fresh
-              ? (dayNum ? `重排 D${dayNum}？` : '全新排一版？')
-              : (dayNum ? `改 D${dayNum}？` : '按上一版再改？')),
-          content: recommend
-            ? '不改现在的走法，只在路线附近插入景点。不合适可取消。'
-            : (fresh
-              ? '按你的描述重新排，不沿用现在的地点。生成后看路线，合适再保存。'
-              : '会在上一版 AI 行程上修改。不合适可取消或再生成。'),
-          confirmText: recommend ? '推荐' : '生成',
-          success: (r) => resolve(r.confirm),
-        })
-      })
-      if (!ok) return
-    }
     this.setData({ aiLoading: true })
     wx.showLoading({ title: recommend ? '正在推荐附近景点' : (fresh ? '正在重排' : (dayNum ? `正在改 D${dayNum}` : '正在调整行程')), mask: true })
     try {
@@ -948,6 +944,7 @@ Page({
         aiKb: 0,
         aiPending: true,
         aiEntry: false,
+        aiPrompt: '',
         aiIntro,
         routesReady: false,
         mapScope: dayNum ? 'day' : 'all',
@@ -969,6 +966,10 @@ Page({
     const all = (this.data.days || []).flatMap((d) => d.plans || [])
     const p = all.find((i) => i.id === markerId)
     if (!p) return
+    if (this.data.aiPending) {
+      openMap(p)
+      return
+    }
     if (this.data.mode === 'edit' && this.data.canEdit) {
       this.openPlanEdit({ id: p.id, plan: p })
       return

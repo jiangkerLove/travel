@@ -68,8 +68,8 @@
       <view class="tab {{tab === 'member' ? 'on' : ''}}" bind:tap="setTab" data-v="member">成员</view>
     </view>
     <view class="edit-banner has-act" wx:elif="{{aiPending}}">
-      <text class="edit-banner-txt">{{aiIntro}}</text>
-      <text class="edit-banner-act" catch:tap="cancelAi">取消</text>
+      <text class="edit-banner-txt">{{aiIntro}} · 这版不手改，改提示词让 AI 接着排</text>
+      <text class="edit-banner-act" catch:tap="openAi">改提示词</text>
     </view>
     <view class="edit-banner" wx:elif="{{!routesReady}}">
       <text>排点中 · 预览后看路线与用时</text>
@@ -125,7 +125,7 @@
           <view class="empty-mark">🍃</view>
           <view class="empty-title">{{mode === 'edit' ? (currentDay.startFrom ? '接着往下排' : '这一天还是空的') : '这一天还没有行程'}}</view>
           <view class="empty-sub">{{mode === 'edit' ? (currentDay.startFrom ? '起点已接上昨天最后停留的地方' : '先选地点，可随时移到其他天') : '路线由团长或有权限的同伴来排'}}</view>
-          <view class="soft-btn main" wx:if="{{mode === 'edit'}}" bind:tap="quickAddEnd">{{currentDay.startFrom ? '去下一站' : '开始选点'}}</view>
+          <view class="soft-btn main" wx:if="{{mode === 'edit' && !aiPending}}" bind:tap="quickAddEnd">{{currentDay.startFrom ? '去下一站' : '开始选点'}}</view>
         </view>
 
         <view class="plan-list" wx:else>
@@ -154,13 +154,13 @@
             </view>
             <view
               class="plan-more"
-              wx:if="{{mode === 'edit'}}"
+              wx:if="{{mode === 'edit' && !aiPending}}"
               catch:tap="onMorePlan"
               data-id="{{item.id}}"
             >⋯</view>
             <view
               class="plan-handle"
-              wx:if="{{mode === 'edit'}}"
+              wx:if="{{mode === 'edit' && !aiPending}}"
               catchtouchstart="onDragStart"
               catchtouchmove="onDragMove"
               catchtouchend="onDragEnd"
@@ -298,7 +298,7 @@
 
   <view class="edit-bar" wx:if="{{mode === 'edit' && aiPending}}">
     <view class="edit-bar-btn ghost" bind:tap="cancelAi">取消</view>
-    <view class="edit-bar-btn add" bind:tap="openAi">再生成</view>
+    <view class="edit-bar-btn add" bind:tap="openAi">改提示词</view>
     <view class="edit-bar-btn main" bind:tap="keepAi">保存</view>
   </view>
   <view class="edit-bar" wx:elif="{{mode === 'edit'}}">
@@ -332,9 +332,11 @@
         >D{{item.day_num}}</view>
       </view>
       <view class="ai-body">
-        <view class="ai-hint" wx:if="{{aiMode === 'recommend'}}">不改现在的走法，只在路线附近推荐景点。可以写偏好，也可以直接推荐。</view>
-        <view class="ai-hint" wx:elif="{{aiDayNum === 0}}">写要去哪或粘贴链接，会按你的描述全新排一版，不沿用现在的地点。第一版之后再生成，才会在上一版上改。</view>
-        <view class="ai-hint" wx:else>只改 D{{aiDayNum}}。第一版按你的描述重排；之后再生成才基于上一版加减。</view>
+        <view class="ai-hint" wx:if="{{aiPending && aiMode === 'recommend'}}">基于当前这版继续推荐。改提示词即可，比如想多看古镇、别太累。</view>
+        <view class="ai-hint" wx:elif="{{aiPending}}">基于当前这版继续改，不会推倒重来。写上要加、要去、不要去的即可。</view>
+        <view class="ai-hint" wx:elif="{{aiMode === 'recommend'}}">不改现在的走法，只在路线附近推荐景点。可以写偏好，也可以直接推荐。</view>
+        <view class="ai-hint" wx:elif="{{aiDayNum === 0}}">写要去哪或粘贴链接，会按你的描述全新排一版。</view>
+        <view class="ai-hint" wx:else>只改 D{{aiDayNum}}。写这天要去哪、加上或去掉什么。</view>
         <textarea
           class="ai-input"
           value="{{aiPrompt}}"
@@ -349,7 +351,7 @@
           bindkeyboardheightchange="onAiKeyboard"
         />
         <view class="ai-row">
-          <view class="ai-btn main tight {{aiLoading ? 'off' : ''}}" catch:tap="runAiDraft">{{aiMode === 'recommend' ? '推荐并预览' : (aiDayNum ? '生成这一天' : '生成并预览')}}</view>
+          <view class="ai-btn main tight {{aiLoading ? 'off' : ''}}" catch:tap="runAiDraft">{{aiPending ? (aiMode === 'recommend' ? '按提示继续推荐' : '按提示继续改') : (aiMode === 'recommend' ? '推荐并预览' : (aiDayNum ? '生成这一天' : '生成并预览'))}}</view>
         </view>
       </view>
     </view>

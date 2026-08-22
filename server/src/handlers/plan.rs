@@ -816,6 +816,7 @@ pub async fn map_search(
         &q.q,
         q.lng,
         q.lat,
+        None,
     )
     .await?;
     Ok(ok(list))

@@ -104,6 +104,78 @@ fn map_point_type(raw: &str) -> String {
     }
 }
 
+fn looks_like_lodging(name: &str) -> bool {
+    ["酒店", "宾馆", "民宿", "客栈", "旅馆", "旅社", "青旅", "度假村"]
+        .iter()
+        .any(|k| name.contains(k))
+}
+
+fn looks_like_settlement(name: &str) -> bool {
+    name.contains("镇")
+        || name.contains("乡")
+        || name.contains("村")
+        || name.contains("县城")
+        || name.contains("街道")
+        || name.ends_with("县")
+        || name.ends_with("市")
+}
+
+fn looks_like_transport(name: &str) -> bool {
+    name.contains("机场") || name.contains("火车站") || name.contains("高铁站") || name.contains("汽车站")
+}
+
+fn strip_lodging_brand(name: &str) -> Option<String> {
+    const MARKS: &[&str] = &[
+        "精品民宿",
+        "特色民宿",
+        "民宿",
+        "精品酒店",
+        "大酒店",
+        "酒店",
+        "宾馆",
+        "客栈",
+        "旅馆",
+        "旅社",
+        "青旅",
+        "度假村",
+    ];
+    for mark in MARKS {
+        if let Some(i) = name.find(mark) {
+            let prefix = name[..i]
+                .trim_end_matches(['的', '·', '-', '—', ' '])
+                .trim();
+            if looks_like_settlement(prefix) {
+                return Some(prefix.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// 每天收尾落到能过夜的镇村，不推荐具体住宿，也不用景点收尾。
+fn finish_day_end(p: &mut AiPoint, is_trip_last_day: bool) {
+    if looks_like_lodging(&p.place_name) {
+        if let Some(town) = strip_lodging_brand(&p.place_name) {
+            p.place_name = town;
+            if looks_like_lodging(&p.query) {
+                p.query.clear();
+            }
+        }
+    }
+    if p.note.as_ref().is_some_and(|n| looks_like_lodging(n)) {
+        p.note = None;
+    }
+    if looks_like_transport(&p.place_name) && is_trip_last_day {
+        p.point_type = "transport".into();
+        return;
+    }
+    if looks_like_settlement(&p.place_name) || looks_like_lodging(&p.place_name) {
+        p.point_type = "hotel".into();
+    }
+}
+
+const OVERNIGHT_RULE: &str = "每天最后一个点必须是当晚能住下的镇、乡、村或县城，用地名（如日隆镇、某某村），point_type=hotel。禁止把景区、山谷、湖、寺、古城等景点当当天最后一点。禁止出现具体酒店/宾馆/民宿/客栈店名，note 里也不要写店名。最后一天若返程，最后一个点可以是机场或车站（point_type=transport）；若仍过夜，仍收在镇村。";
+
 fn extract_urls(text: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut search_from = 0;
@@ -233,7 +305,9 @@ async fn chat_json(api_key: &str, user_content: String) -> Result<ModelOut, AppE
         "messages": [
             {
                 "role": "system",
-                "content": "你是旅行行程规划助手。只输出 JSON，不要解释。按游览顺序排点，地点用中国大陆景区/店铺常用名，要能被高德搜到。避开用户明确不想去的地方。每天 2-5 个点。point_type 只能是 sight/hotel/food/gas/transport。query 写成「城市 地点」。arrive 用 HH:MM。note 只写一句必要提醒。summary 写给人看的介绍：排全程就用一两句话讲整趟怎么走，只改一天就介绍这一天。theme 也写当天一句话介绍。"
+                "content": format!(
+                    "你是旅行行程规划助手。只输出 JSON，不要解释。按游览顺序排点，地点用中国大陆常用名，要能被高德搜到。避开用户明确不想去的地方。每天 3-6 个点（含收尾过夜点）。point_type 只能是 sight/hotel/food/gas/transport。query 写成「城市 地点」。arrive 用 HH:MM。note 只写一句必要提醒。summary 写给人看的介绍：排全程就用一两句话讲整趟怎么走，只改一天就介绍这一天。theme 也写当天一句话介绍。{OVERNIGHT_RULE}"
+                )
             },
             { "role": "user", "content": user_content }
         ]
@@ -279,30 +353,33 @@ async fn geocode_point(key: &str, secret: &str, city: &str, p: &mut AiPoint) {
         return;
     }
     let q = if p.query.trim().is_empty() {
-        format!("{} {}", p.place_name, city)
+        p.place_name.clone()
     } else {
-        p.query.clone()
+        p.query.trim().to_string()
     };
-    if let Ok(list) = search_places(key, secret, &q, None, None).await {
-        if let Some(hit) = pick_poi(&list, &p.place_name) {
-            p.longitude = Some(hit.longitude);
-            p.latitude = Some(hit.latitude);
-            if p.place_name.chars().count() < 2 {
-                p.place_name = hit.name.clone();
-            }
-            p.found = true;
-            return;
-        }
+    if try_geocode(key, secret, city, p, &q).await {
+        return;
     }
-    if q != p.place_name {
-        if let Ok(list) = search_places(key, secret, &p.place_name, None, None).await {
-            if let Some(hit) = pick_poi(&list, &p.place_name) {
-                p.longitude = Some(hit.longitude);
-                p.latitude = Some(hit.latitude);
-                p.found = true;
-            }
-        }
+    let name = p.place_name.clone();
+    if q != name {
+        try_geocode(key, secret, city, p, &name).await;
     }
+}
+
+async fn try_geocode(key: &str, secret: &str, city: &str, p: &mut AiPoint, q: &str) -> bool {
+    let Ok(list) = search_places(key, secret, q, None, None, Some(city)).await else {
+        return false;
+    };
+    let Some(hit) = pick_poi(&list, &p.place_name) else {
+        return false;
+    };
+    p.longitude = Some(hit.longitude);
+    p.latitude = Some(hit.latitude);
+    if p.place_name.chars().count() < 2 {
+        p.place_name = hit.name.clone();
+    }
+    p.found = true;
+    true
 }
 
 fn pick_poi<'a>(list: &'a [PoiVo], name: &str) -> Option<&'a PoiVo> {
@@ -357,10 +434,10 @@ pub async fn draft_itinerary(
             existing.to_string(),
             match focus_day {
                 Some(d) => format!(
-                    "沿途推荐，只改第 {d} 天：整体路线不能改，必须原样保留该天已有地点和先后顺序。只在现有点附近、顺路插入 1-2 个景点。不要删点、不要换顺序、不要换成另一条线。"
+                    "沿途推荐，只改第 {d} 天：整体路线不能改，必须原样保留该天已有地点和先后顺序。只在现有点附近、顺路插入 1-2 个景点，且必须插在当天最后一个过夜点之前，不能把景点放到当天最后。不要删点、不要换顺序、不要换成另一条线。"
                 ),
                 None => format!(
-                    "沿途推荐：整体路线不能改，必须原样保留每天已有地点和先后顺序。只在现有点附近、顺路插入景点，每天最多 1-2 个。不要删点、不要换顺序、不要重排。day_num 必须在 1 到 {days} 之间。"
+                    "沿途推荐：整体路线不能改，必须原样保留每天已有地点和先后顺序。只在现有点附近、顺路插入景点，每天最多 1-2 个，且必须插在当天最后一个过夜点之前，不能把景点放到当天最后。不要删点、不要换顺序、不要重排。day_num 必须在 1 到 {days} 之间。"
                 ),
             },
         )
@@ -378,7 +455,7 @@ pub async fn draft_itinerary(
         )
     };
     let user_content = format!(
-        "目的地：{destination}\n日期：{start} 至 {end}，共 {days} 天\n现有行程（按顺序）：{existing_line}\n{scope}\n用户要求：{prefer}\n{links}\n请输出 JSON：{{\"summary\":\"一句话\",\"days\":[{{\"day_num\":1,\"theme\":\"\",\"points\":[{{\"place_name\":\"\",\"query\":\"城市 地点\",\"point_type\":\"sight\",\"stay_minutes\":90,\"arrive\":\"10:00\",\"note\":\"\"}}]}}]}}"
+        "目的地：{destination}\n日期：{start} 至 {end}，共 {days} 天\n现有行程（按顺序）：{existing_line}\n{scope}\n硬性规则：{OVERNIGHT_RULE}\n用户要求：{prefer}\n{links}\n请输出 JSON：{{\"summary\":\"一句话\",\"days\":[{{\"day_num\":1,\"theme\":\"\",\"points\":[{{\"place_name\":\"\",\"query\":\"城市 地点\",\"point_type\":\"sight\",\"stay_minutes\":90,\"arrive\":\"10:00\",\"note\":\"\"}}]}}]}}"
     );
     let model = chat_json(api_key, user_content).await?;
     let mut draft = AiDraft {
@@ -411,6 +488,11 @@ pub async fn draft_itinerary(
                 break;
             }
         }
+        if !recommend {
+            if let Some(last) = points.last_mut() {
+                finish_day_end(last, day_num == days);
+            }
+        }
         if !points.is_empty() {
             draft.days.push(AiDay {
                 day_num,
@@ -430,14 +512,9 @@ pub async fn draft_itinerary(
     if draft.days.is_empty() {
         return Err(AppError::BadRequest("没能排出地点，换种说法再试".into()));
     }
-    let mut geocoded = 0;
     for day in &mut draft.days {
         for p in &mut day.points {
-            if geocoded >= 16 {
-                break;
-            }
             geocode_point(amap_key, amap_secret, destination, p).await;
-            geocoded += 1;
         }
     }
     Ok(draft)

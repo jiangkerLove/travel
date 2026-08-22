@@ -1,6 +1,43 @@
+use std::collections::{HashMap, VecDeque};
+use std::sync::OnceLock;
+use std::time::{Duration, Instant};
+
 use serde::Deserialize;
+use tokio::sync::Mutex;
 
 use crate::error::AppError;
+
+/// 高德同一接口 QPS ≤ 3。按 path 滑动窗口排队。
+pub async fn throttle_amap(path: &str) {
+    const MAX: usize = 3;
+    const WINDOW: Duration = Duration::from_millis(1050);
+    static LIMITER: OnceLock<Mutex<HashMap<String, VecDeque<Instant>>>> = OnceLock::new();
+    let slots = LIMITER.get_or_init(|| Mutex::new(HashMap::new()));
+    loop {
+        let mut map = slots.lock().await;
+        let now = Instant::now();
+        let q = map.entry(path.to_string()).or_default();
+        while q.front().is_some_and(|t| now.duration_since(*t) >= WINDOW) {
+            q.pop_front();
+        }
+        if q.len() < MAX {
+            q.push_back(now);
+            return;
+        }
+        let wait = q
+            .front()
+            .map(|t| WINDOW.saturating_sub(now.duration_since(*t)) + Duration::from_millis(20))
+            .unwrap_or(Duration::from_millis(350));
+        drop(map);
+        tokio::time::sleep(wait).await;
+    }
+}
+
+fn amap_qps_exceeded(v: &serde_json::Value) -> bool {
+    let info = v.get("info").and_then(|x| x.as_str()).unwrap_or("");
+    let code = v.get("infocode").and_then(|x| x.as_str()).unwrap_or("");
+    code == "10021" || info.contains("CUQPS") || info.contains("QPS")
+}
 
 #[derive(serde::Serialize, Clone)]
 pub struct PoiVo {
@@ -91,17 +128,21 @@ async fn amap_json(key: &str, secret: &str, path: &str, params: &[(&str, &str)])
         url.push_str("&sig=");
         url.push_str(&format!("{:x}", md5::compute(format!("{query_raw}{secret}").as_bytes())));
     }
-    reqwest::Client::builder()
+    let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(4))
         .build()
-        .ok()?
-        .get(&url)
-        .send()
-        .await
-        .ok()?
-        .json::<serde_json::Value>()
-        .await
-        .ok()
+        .ok()?;
+    for attempt in 0..3 {
+        throttle_amap(path).await;
+        let v = client.get(&url).send().await.ok()?.json::<serde_json::Value>().await.ok()?;
+        if amap_qps_exceeded(&v) && attempt < 2 {
+            tracing::warn!("amap qps limited path={path} attempt={}", attempt + 1);
+            tokio::time::sleep(Duration::from_millis(400)).await;
+            continue;
+        }
+        return Some(v);
+    }
+    None
 }
 
 async fn amap_get(key: &str, secret: &str, path: &str, params: &[(&str, &str)]) -> Option<AmapSearch> {
@@ -161,6 +202,7 @@ pub async fn search_places(
     keyword: &str,
     lng: Option<f64>,
     lat: Option<f64>,
+    city: Option<&str>,
 ) -> Result<Vec<PoiVo>, AppError> {
     if key.is_empty() {
         return Err(AppError::BadRequest("未配置 AMAP_KEY，无法搜索地点".into()));
@@ -173,6 +215,7 @@ pub async fn search_places(
         (Some(lng), Some(lat)) => Some(format!("{lng:.6},{lat:.6}")),
         _ => None,
     };
+    let city = city.map(str::trim).filter(|s| !s.is_empty());
     let mut params: Vec<(&str, &str)> = vec![
         ("keywords", kw),
         ("offset", "8"),
@@ -181,6 +224,9 @@ pub async fn search_places(
     ];
     if let Some(ref loc) = loc {
         params.push(("location", loc.as_str()));
+    }
+    if let Some(c) = city {
+        params.push(("city", c));
     }
     let mut list = pois_from_search(
         amap_get(key, secret, "/v3/place/text", &params)
@@ -198,6 +244,9 @@ pub async fn search_places(
         if let Some(ref loc) = loc {
             tip_params.push(("location", loc.as_str()));
         }
+        if let Some(c) = city {
+            tip_params.push(("city", c));
+        }
         list = pois_from_search(
             amap_get(key, secret, "/v3/assistant/inputtips", &tip_params)
                 .await
@@ -211,21 +260,20 @@ pub async fn search_places(
         );
     }
     if list.is_empty() {
+        let mut geo_params: Vec<(&str, &str)> = vec![("address", kw)];
+        if let Some(c) = city {
+            geo_params.push(("city", c));
+        }
         list = pois_from_search(
-            amap_get(
-                key,
-                secret,
-                "/v3/geocode/geo",
-                &[("address", kw)],
-            )
-            .await
-            .unwrap_or(AmapSearch {
-                status: None,
-                info: None,
-                pois: None,
-                tips: None,
-                geocodes: None,
-            }),
+            amap_get(key, secret, "/v3/geocode/geo", &geo_params)
+                .await
+                .unwrap_or(AmapSearch {
+                    status: None,
+                    info: None,
+                    pois: None,
+                    tips: None,
+                    geocodes: None,
+                }),
         );
     }
     Ok(list)
