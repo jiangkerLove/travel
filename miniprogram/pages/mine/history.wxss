@@ -5,6 +5,6 @@
 }
 
 .status-pill.sample {
-  background: #e7f1eb;
-  color: #5d8a76;
+  background: #e9f6f0;
+  color: #4f9f8a;
 }

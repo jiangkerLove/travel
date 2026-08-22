@@ -1,5 +1,5 @@
 page {
-  background: #f3f6f3;
+  background: #f4f9f6;
 }
 
 .entry {
@@ -9,7 +9,7 @@ page {
   background:
     radial-gradient(ellipse 90% 55% at 12% -8%, rgba(111, 155, 136, 0.22), transparent 58%),
     radial-gradient(ellipse 70% 45% at 100% 8%, rgba(215, 228, 220, 0.95), transparent 52%),
-    #f3f6f3;
+    #f4f9f6;
 }
 
 .hero {
@@ -29,14 +29,14 @@ page {
   margin-top: 28rpx;
   font-size: 52rpx;
   font-weight: 650;
-  color: #2f3d36;
+  color: #2f3b35;
   letter-spacing: 4rpx;
 }
 
 .tagline {
   margin-top: 14rpx;
   font-size: 26rpx;
-  color: #7d8c84;
+  color: #8fa19a;
   line-height: 1.5;
 }
 
@@ -69,8 +69,8 @@ page {
 }
 
 .placeholder {
-  background: #eef3ef;
-  color: #6f9b88;
+  background: #edf5f0;
+  color: #6cbfa6;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -79,16 +79,16 @@ page {
 
 .nick {
   height: 88rpx;
-  background: #f3f6f3;
+  background: #f4f9f6;
   border-radius: 16rpx;
   padding: 0 24rpx;
   margin-bottom: 28rpx;
   font-size: 30rpx;
-  color: #2f3d36;
+  color: #2f3b35;
 }
 
 .ph {
-  color: #b4c2ba;
+  color: #b9ccc3;
 }
 
 .enter {
@@ -98,7 +98,7 @@ page {
   font-size: 30rpx;
   font-weight: 650;
   color: #fff;
-  background: #6f9b88;
+  background: #6cbfa6;
   box-shadow: 0 12rpx 28rpx rgba(111, 155, 136, 0.28);
 }
 

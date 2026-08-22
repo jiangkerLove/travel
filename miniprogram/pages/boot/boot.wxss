@@ -2,7 +2,7 @@
   min-height: 100vh;
   background:
     radial-gradient(ellipse 80% 50% at 10% -10%, rgba(111, 155, 136, 0.18), transparent 55%),
-    #f3f6f3;
+    #f4f9f6;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -21,14 +21,14 @@
   margin-top: 28rpx;
   font-size: 42rpx;
   font-weight: 650;
-  color: #2f3d36;
+  color: #2f3b35;
   letter-spacing: 3rpx;
 }
 
 .sub {
   margin-top: 16rpx;
   font-size: 26rpx;
-  color: #8a9a90;
+  color: #8fa19a;
 }
 
 .err {
@@ -43,7 +43,7 @@
   margin-top: 40rpx;
   padding: 16rpx 48rpx;
   border-radius: 999rpx;
-  background: #6f9b88;
+  background: #6cbfa6;
   color: #fff;
   font-size: 28rpx;
 }

@@ -18,6 +18,24 @@ pub fn shanghai_today() -> NaiveDate {
     shanghai_now().date()
 }
 
+pub fn gen_nickname() -> String {
+    const LEFT: &[&str] = &[
+        "晚风", "北岛", "青野", "雾岛", "星河", "南风", "青石", "远山", "薄暮", "霜叶",
+        "云隙", "潮声", "松风", "月渚", "荒原", "青岚", "暮色", "白露", "秋水", "凌川",
+        "野径", "寒江", "晴空", "夜航", "山海", "银河", "晓雾", "金风", "翠微", "孤舟",
+    ];
+    const RIGHT: &[&str] = &[
+        "行者", "旅人", "过客", "漫游", "拾光", "踏青", "远航", "听风", "问山", "追云",
+        "渡河", "寻路", "观海", "栖野", "拾贝", "停云", "踏雪", "乘风", "望月", "揽星",
+    ];
+    let mut rng = rand::thread_rng();
+    format!(
+        "{}{}",
+        LEFT[rng.gen_range(0..LEFT.len())],
+        RIGHT[rng.gen_range(0..RIGHT.len())]
+    )
+}
+
 pub fn gen_invite_code() -> String {
     const CHARS: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     let mut rng = rand::thread_rng();

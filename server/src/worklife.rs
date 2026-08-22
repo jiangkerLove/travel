@@ -624,7 +624,7 @@ pub fn trip_countdown(start: NaiveDate, end: NaiveDate, now: NaiveDate) -> Strin
     if start > now {
         let span = count_span(now, start);
         if span.work > 0 {
-            format!("还有 {} 天出发 · 要上 {} 个工作日", span.work + span.rest, span.work)
+            format!("还有 {} 天出发 · 含 {} 个工作日", span.work + span.rest, span.work)
         } else {
             format!("还有 {} 天出发", span.work + span.rest)
         }

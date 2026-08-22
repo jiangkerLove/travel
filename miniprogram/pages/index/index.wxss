@@ -1,29 +1,46 @@
 page {
-  background: #f3f6f3;
+  background: #f4f9f6;
 }
 
 .home-page {
   min-height: 100vh;
   padding: 8rpx 32rpx 80rpx;
-  background: #f3f6f3;
+  background: #f4f9f6;
   box-sizing: border-box;
 }
 
 .hero {
-  padding: 28rpx 8rpx 12rpx;
+  position: relative;
+  overflow: hidden;
+  margin-top: 12rpx;
+  padding: 32rpx 28rpx 34rpx;
+  border-radius: 28rpx;
+  background: linear-gradient(135deg, #eaf7f1 0%, #f6fbf8 70%);
+  border: 1rpx solid #e3f2ea;
+}
+
+.hero-blob {
+  position: absolute;
+  top: -60rpx;
+  right: -50rpx;
+  width: 220rpx;
+  height: 220rpx;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(124, 202, 180, 0.22) 0%, rgba(124, 202, 180, 0) 70%);
+  pointer-events: none;
 }
 
 .brand {
   font-size: 48rpx;
   font-weight: 650;
-  color: #2f3d36;
+  color: #2f3b35;
   letter-spacing: 1rpx;
 }
 
 .lead {
   margin-top: 12rpx;
   font-size: 26rpx;
-  color: #7d8c84;
+  color: #8fa19a;
   line-height: 1.6;
 }
 
@@ -34,20 +51,21 @@ page {
 }
 
 .soft-btn {
-  min-width: 140rpx;
+  min-width: 176rpx;
   padding: 16rpx 32rpx;
   border-radius: 999rpx;
   text-align: center;
   font-size: 26rpx;
-  color: #4f6f62;
+  color: #4f9f8a;
   background: rgba(255, 255, 255, 0.9);
-  border: 1rpx solid #d7e4dc;
+  border: 1rpx solid #d9ece3;
 }
 
 .soft-btn.main {
-  background: #6f9b88;
+  background: linear-gradient(135deg, #7ccab4 0%, #56ab92 100%);
   color: #fff;
-  border-color: #6f9b88;
+  border-color: transparent;
+  box-shadow: 0 8rpx 22rpx rgba(108, 191, 166, 0.32);
 }
 
 .section {
@@ -55,75 +73,66 @@ page {
 }
 
 .section-title {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
   padding: 0 8rpx 20rpx;
   font-size: 24rpx;
-  color: #8a9a90;
+  color: #8fa19a;
   letter-spacing: 4rpx;
 }
 
+.sec-dot {
+  width: 8rpx;
+  height: 24rpx;
+  border-radius: 999rpx;
+  background: linear-gradient(180deg, #7ccab4 0%, #56ab92 100%);
+}
+
 .empty {
-  background: #fff;
+  background: linear-gradient(180deg, #fdfefd 0%, #f7fbf9 100%);
   border-radius: 28rpx;
   padding: 80rpx 32rpx;
   text-align: center;
+  border: 1rpx solid #e9f4ee;
 }
 
 .empty-mark { font-size: 56rpx; margin-bottom: 16rpx; }
-.empty-text { font-size: 30rpx; color: #2f3d36; }
-.empty-sub { margin-top: 8rpx; font-size: 24rpx; color: #8a9a90; }
+.empty-text { font-size: 30rpx; color: #2f3b35; }
+.empty-sub { margin-top: 8rpx; font-size: 24rpx; color: #8fa19a; }
 
 .trip {
   background: #fff;
   border-radius: 28rpx;
-  padding: 28rpx;
+  padding: 28rpx 32rpx 24rpx;
   margin-bottom: 24rpx;
-  box-shadow: 0 10rpx 28rpx rgba(80, 110, 96, 0.04);
+  box-shadow: 0 8rpx 24rpx rgba(108, 191, 166, 0.09);
 }
 
 .trip.tapable:active {
-  background: #f6faf7;
+  background: #f4f9f6;
 }
 
-.trip-top {
-  display: flex;
-  gap: 20rpx;
-  align-items: flex-start;
-}
-
-.thumb {
-  width: 88rpx;
-  height: 88rpx;
-  border-radius: 24rpx;
-  background: #e7f1eb;
-  color: #5d8a76;
-  font-size: 36rpx;
-  font-weight: 650;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.trip-main { flex: 1; min-width: 0; }
-
-.trip-title-row {
+.trip-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12rpx;
+  gap: 16rpx;
 }
 
 .trip-title {
-  font-size: 32rpx;
+  font-size: 34rpx;
   font-weight: 650;
-  color: #2f3d36;
+  color: #2f3b35;
+  line-height: 1.35;
   flex: 1;
+  min-width: 0;
 }
 
 .soft-pill {
   font-size: 20rpx;
-  color: #6f9b88;
-  background: #eef6f1;
+  color: #6cbfa6;
+  background: #ecf6f1;
   padding: 4rpx 12rpx;
   border-radius: 999rpx;
   flex-shrink: 0;
@@ -133,42 +142,48 @@ page {
   display: flex;
   gap: 8rpx;
   flex-shrink: 0;
+  padding-top: 4rpx;
 }
 
 .soft-pill.sample {
-  color: #b45309;
-  background: #fff7ed;
+  color: #c08a3e;
+  background: #fbf2e6;
 }
 
-.trip-hint {
-  margin-top: 8rpx;
-  font-size: 22rpx;
-  color: #b08968;
-}
-
-.trip-place {
-  margin-top: 6rpx;
+.trip-sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 10rpx;
   font-size: 26rpx;
-  color: #5d8a76;
+  line-height: 1.5;
 }
 
-.trip-date {
-  margin-top: 4rpx;
-  font-size: 24rpx;
-  color: #9aa89f;
+.trip-place { color: #4f9f8a; }
+
+.trip-date { color: #97a8a1; }
+
+.trip-sub .sep {
+  margin: 0 10rpx;
+  color: #c5cdc9;
 }
 
 .trip-count {
-  margin-top: 8rpx;
+  margin-top: 18rpx;
+  padding: 12rpx 18rpx;
+  border-radius: 14rpx;
+  background: #f3faf7;
   font-size: 24rpx;
-  color: #6f9b88;
+  color: #4f9f8a;
+  line-height: 1.4;
 }
 
 .trip-meta {
-  margin: 20rpx 0 8rpx;
-  padding-left: 108rpx;
+  margin-top: 20rpx;
+  padding-top: 16rpx;
+  border-top: 1rpx solid #eef4f1;
   font-size: 22rpx;
-  color: #9aa89f;
+  color: #97a8a1;
 }
 
 .trip-meta .dot { margin: 0 8rpx; }

@@ -1,5 +1,5 @@
 page {
-  background: #f3f6f3;
+  background: #f4f9f6;
 }
 
 .edit-page {
@@ -27,7 +27,7 @@ page {
   width: 120rpx;
   flex-shrink: 0;
   font-size: 30rpx;
-  color: #2f3d36;
+  color: #2f3b35;
 }
 
 .cell-right {
@@ -53,7 +53,7 @@ page {
   width: 80rpx;
   height: 80rpx;
   border-radius: 50%;
-  background: #e7f1eb;
+  background: #e9f6f0;
   display: block;
 }
 
@@ -61,7 +61,7 @@ page {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #5d8a76;
+  color: #4f9f8a;
   font-size: 30rpx;
   font-weight: 650;
 }
@@ -70,18 +70,18 @@ page {
   flex: 1;
   height: 64rpx;
   font-size: 30rpx;
-  color: #2f3d36;
+  color: #2f3b35;
   text-align: right;
 }
 
 .ph {
-  color: #b4c2ba;
+  color: #b9ccc3;
 }
 
 .line {
   height: 1rpx;
   margin-left: 28rpx;
-  background: #eef3ef;
+  background: #edf5f0;
 }
 
 .later {
@@ -94,11 +94,11 @@ page {
 
 .val {
   font-size: 30rpx;
-  color: #2f3d36;
+  color: #2f3b35;
 }
 
 .chev {
-  color: #c5d0c9;
+  color: #c8d6cf;
   font-size: 36rpx;
   line-height: 1;
   margin-left: 8rpx;
@@ -107,7 +107,7 @@ page {
 .hint {
   margin: 20rpx 8rpx 0;
   font-size: 22rpx;
-  color: #9aa89f;
+  color: #97a8a1;
   line-height: 1.6;
 }
 
@@ -115,7 +115,7 @@ page {
   margin-top: 48rpx;
   height: 92rpx;
   border-radius: 999rpx;
-  background: #6f9b88;
+  background: #6cbfa6;
   color: #fff;
   font-size: 30rpx;
   font-weight: 650;

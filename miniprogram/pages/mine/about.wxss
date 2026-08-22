@@ -1,5 +1,5 @@
 page {
-  background: #f3f6f3;
+  background: #f4f9f6;
 }
 
 .about-page {
@@ -8,7 +8,7 @@ page {
   box-sizing: border-box;
   background:
     radial-gradient(ellipse 80% 45% at 50% -10%, rgba(111, 155, 136, 0.16), transparent 55%),
-    #f3f6f3;
+    #f4f9f6;
 }
 
 .mark {
@@ -24,7 +24,7 @@ page {
   text-align: center;
   font-size: 40rpx;
   font-weight: 650;
-  color: #2f3d36;
+  color: #2f3b35;
   letter-spacing: 2rpx;
 }
 
@@ -32,7 +32,7 @@ page {
   margin-top: 10rpx;
   text-align: center;
   font-size: 24rpx;
-  color: #9aa89f;
+  color: #97a8a1;
 }
 
 .card {
@@ -45,7 +45,7 @@ page {
 
 .p {
   font-size: 28rpx;
-  color: #4f6f62;
+  color: #4f9f8a;
   line-height: 1.75;
 }
 
@@ -57,7 +57,7 @@ page {
   margin-top: 48rpx;
   text-align: center;
   font-size: 22rpx;
-  color: #9aa89f;
+  color: #97a8a1;
   line-height: 1.7;
 }
 

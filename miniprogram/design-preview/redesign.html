@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>旅途计划 · 小清新视觉预览</title>
+<style>
+  :root{
+    --bg:#f4f9f6;
+    --surface:#ffffff;
+    --brand:#6cbfa6;
+    --brand-strong:#4f9f8a;
+    --brand-soft:#e9f6f0;
+    --brand-grad:linear-gradient(135deg,#f1f9f5 0%,#e6f3ed 100%);
+    --ink:#2f3b35;
+    --ink-2:#4a5a52;
+    --muted:#8fa19a;
+    --line:#eef2f0;
+    --amber:#eaa24d;
+    --coral:#f0918a;
+    --radius:24px;
+    --shadow-sm:0 4px 16px rgba(70,100,90,.05);
+    --shadow-md:0 10px 26px rgba(70,100,90,.06);
+    --shadow-lg:0 16px 38px rgba(70,100,90,.09);
+    --font:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  body{
+    font-family:var(--font);
+    background:radial-gradient(1200px 600px at 50% -10%,#eaf4ef,transparent 60%),#eef3f0;
+    min-height:100vh;display:flex;align-items:center;justify-content:center;
+    padding:32px 16px;color:var(--ink);
+  }
+  /* phone frame */
+  .phone{
+    width:390px;height:844px;background:var(--bg);border-radius:46px;
+    box-shadow:0 30px 70px rgba(60,90,80,.16),inset 0 0 0 10px #f4f7f5,inset 0 0 0 12px #dde6e2;
+    overflow:hidden;position:relative;display:flex;flex-direction:column;
+  }
+  .statusbar{height:46px;display:flex;align-items:center;justify-content:space-between;padding:0 26px;font-size:13px;font-weight:600;color:var(--ink);flex-shrink:0}
+  .statusbar .dots{display:flex;gap:5px}
+  .statusbar .dots i{width:6px;height:6px;border-radius:50%;background:var(--ink);opacity:.5}
+  .screen{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none}
+  .screen::-webkit-scrollbar{display:none}
+  .nav{height:60px;background:rgba(255,255,255,.92);backdrop-filter:blur(12px);border-top:1px solid var(--line);
+    display:flex;flex-shrink:0}
+  .nav button{flex:1;border:none;background:none;font-family:var(--font);font-size:11px;color:var(--muted);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer}
+  .nav button .ic{font-size:20px;line-height:1}
+  .nav button.on{color:var(--brand-strong)}
+
+  /* generic card */
+  .card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:18px}
+  .sec-title{font-size:13px;color:var(--muted);letter-spacing:2px;font-weight:600;padding:16px 4px 8px}
+  .sec-title::before{content:"";display:inline-block;width:4px;height:12px;border-radius:999px;
+    background:linear-gradient(180deg,#7ccab4,#56ab92);margin-right:6px;vertical-align:-1px}
+  .muted{color:var(--muted)}
+  .pill{font-size:11px;padding:3px 11px;border-radius:999px;font-weight:600}
+  .pill.brand{color:var(--brand-strong);background:var(--brand-soft)}
+  .pill.amber{color:#b9792f;background:#fbf2e6}
+  .pill.gray{color:#777;background:#f0f0f0}
+
+  /* ---------- HOME ---------- */
+  .hero{margin:10px 16px 2px;padding:18px 20px 20px;border-radius:22px;position:relative;overflow:hidden;
+    background:linear-gradient(135deg,#eaf7f1 0%,#f6fbf8 70%);border:1px solid #e3f2ea}
+  .hero .blob{position:absolute;top:-30px;right:-25px;width:110px;height:110px;border-radius:50%;
+    background:radial-gradient(circle,rgba(124,202,180,.22) 0%,rgba(124,202,180,0) 70%)}
+  .hero .brand{font-size:23px;font-weight:700;color:var(--ink);letter-spacing:.3px}
+  .hero .lead{font-size:13px;color:var(--muted);margin-top:5px;line-height:1.5}
+  .hero .acts{display:flex;gap:8px;margin-top:15px}
+  .btn{padding:9px 22px;border-radius:999px;font-size:13px;font-weight:600;cursor:pointer;border:none;font-family:var(--font);text-align:center}
+  .btn.solid{background:linear-gradient(135deg,#7ccab4 0%,#56ab92 100%);color:#fff;box-shadow:0 5px 14px rgba(108,191,166,.32)}
+  .btn.ghost{background:#fff;color:var(--brand-strong);border:1px solid #dcebe4;box-shadow:var(--shadow-sm)}
+
+  .trip{margin:0 16px 9px;background:var(--surface);border-radius:20px;box-shadow:0 5px 16px rgba(108,191,166,.09);
+    padding:14px 16px 12px;cursor:pointer}
+  .trip .trow{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+  .trip .name{font-size:17px;font-weight:700;line-height:1.35;flex:1;min-width:0}
+  .trip .sub{display:flex;flex-wrap:wrap;align-items:center;margin-top:5px;font-size:13px}
+  .trip .place{color:var(--brand-strong);font-weight:500}
+  .trip .date{color:var(--muted)}
+  .trip .sep{margin:0 6px;color:#c5cdc9}
+  .trip .count{margin-top:10px;padding:7px 10px;border-radius:8px;background:#f3faf7;font-size:12px;font-weight:600;color:var(--brand-strong)}
+  .trip .meta{display:flex;gap:6px;align-items:center;font-size:11.5px;color:var(--muted);margin-top:11px;padding-top:10px;border-top:1px solid #eef4f1;flex-wrap:wrap}
+  .trip .meta .d{width:3px;height:3px;border-radius:50%;background:#c5cdc9}
+
+  /* ---------- DETAIL ---------- */
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:8px 14px 4px}
+  .topbar .t{font-size:18px;font-weight:700}
+  .topbar .mgmt{font-size:12px;font-weight:600;color:#fff;background:var(--brand);padding:6px 14px;border-radius:999px}
+  .map{margin:8px 16px 0;height:200px;border-radius:22px;position:relative;overflow:hidden;
+    background:linear-gradient(180deg,#eef6f1,#f6faf8)}
+  .map svg{position:absolute;inset:0;width:100%;height:100%}
+  .map .pin{position:absolute;width:14px;height:14px;border-radius:50% 50% 50% 0;background:var(--brand);
+    transform:rotate(-45deg);box-shadow:0 3px 8px rgba(80,120,105,.3)}
+  .map .pin.w{background:#fff;border:3px solid var(--brand)}
+  .map .full{position:absolute;right:12px;top:12px;width:34px;height:34px;border-radius:50%;
+    background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-sm);font-size:15px;color:var(--brand-strong)}
+  .days{display:flex;gap:8px;overflow-x:auto;padding:14px 16px 4px;scrollbar-width:none}
+  .days::-webkit-scrollbar{display:none}
+  .days .chip{flex-shrink:0;padding:9px 16px;border-radius:999px;background:#fff;color:var(--brand-strong);
+    font-size:13px;font-weight:600;box-shadow:var(--shadow-sm);white-space:nowrap}
+  .days .chip.on{background:var(--brand);color:#fff}
+  .tabs{display:flex;gap:4px;margin:6px 16px;padding:4px;background:var(--brand-soft);border-radius:999px}
+  .tabs .tb{flex:1;text-align:center;padding:9px 0;border-radius:999px;font-size:13px;font-weight:600;color:var(--brand-strong);cursor:pointer}
+  .tabs .tb.on{background:#fff;color:var(--ink);box-shadow:var(--shadow-sm)}
+
+  .plan{padding:6px 16px 16px}
+  .plan .item{display:flex;gap:12px;background:#fff;border-radius:18px;padding:14px 16px;margin-bottom:10px;box-shadow:var(--shadow-sm)}
+  .plan .item.start{background:var(--brand-soft)}
+  .plan .tl{display:flex;flex-direction:column;align-items:center;padding-top:4px}
+  .plan .dot{width:11px;height:11px;border-radius:50%;background:var(--brand);box-shadow:0 0 0 4px var(--brand-soft)}
+  .plan .ln{flex:1;width:2px;background:var(--line);margin:6px 0}
+  .plan .main{flex:1;min-width:0}
+  .plan .nm{font-size:15px;font-weight:700}
+  .plan .ty{font-size:11px;color:var(--brand-strong);background:var(--brand-soft);padding:2px 9px;border-radius:999px;font-weight:600;display:inline-block;margin-top:6px}
+  .plan .ar{font-size:12px;color:var(--muted);margin-top:6px}
+
+  .bill{padding:6px 16px 16px}
+  .bstats{display:flex;gap:10px}
+  .bstats .card{flex:1}
+  .bstats .k{font-size:12px;color:var(--muted)}
+  .bstats .v{font-size:21px;font-weight:700;margin-top:4px}
+  .bstats .card.on{background:var(--brand-soft)}
+  .cat{margin-top:12px}
+  .cat .row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  .cat .lab{font-size:12px;color:var(--ink-2);width:42px;flex-shrink:0}
+  .cat .bar{flex:1;height:8px;border-radius:999px;background:var(--line);overflow:hidden}
+  .cat .bar i{display:block;height:100%;border-radius:999px;background:var(--brand)}
+  .cat .amt{font-size:12px;font-weight:600;width:60px;text-align:right}
+  .blist{margin-top:6px}
+  .blist .b{display:flex;align-items:center;justify-content:space-between;background:#fff;border-radius:16px;
+    padding:13px 16px;margin-bottom:9px;box-shadow:var(--shadow-sm)}
+  .blist .b .nm{font-size:14px;font-weight:600}
+  .blist .b .sub{font-size:11px;color:var(--muted);margin-top:3px}
+  .blist .b .a{font-size:16px;font-weight:700;color:var(--brand-strong)}
+
+  .member{padding:6px 16px 16px}
+  .invite{background:#fff;border-radius:20px;padding:16px;display:flex;align-items:center;justify-content:space-between;
+    box-shadow:var(--shadow-sm);margin-bottom:14px}
+  .invite .k{font-size:12px;color:var(--muted)}
+  .invite .code{font-size:22px;font-weight:700;letter-spacing:3px;margin-top:4px}
+  .invite .cp{font-size:13px;font-weight:600;color:var(--brand-strong);background:var(--brand-soft);padding:9px 16px;border-radius:999px}
+  .gcard{background:#fff;border-radius:18px;padding:14px 16px;box-shadow:var(--shadow-sm);margin-bottom:10px}
+  .gcard .gh{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .gcard .gh .l{display:flex;align-items:center;gap:8px;font-weight:600;color:var(--brand-strong);font-size:13px}
+  .gcard .gh .n{font-size:12px;color:var(--muted)}
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .mc{display:flex;align-items:center;gap:6px;background:var(--bg);border-radius:999px;padding:5px 11px 5px 5px}
+  .mc .av{width:24px;height:24px;border-radius:50%;background:var(--brand-soft);color:var(--brand-strong);font-size:11px;
+    display:flex;align-items:center;justify-content:center;font-weight:700}
+  .mc span{font-size:12px}
+  .mc.lead{background:var(--brand-soft)}
+
+  /* ---------- PROFILE ---------- */
+  .ucard{margin:6px 14px 0;background:#fff;border-radius:var(--radius);padding:18px;display:flex;align-items:center;
+    gap:12px;box-shadow:var(--shadow-sm);cursor:pointer}
+  .ucard .av{width:48px;height:48px;border-radius:50%;background:var(--brand-soft);color:var(--brand-strong);display:flex;
+    align-items:center;justify-content:center;font-size:20px;font-weight:700;flex-shrink:0}
+  .ucard .nm{font-size:17px;font-weight:700}
+  .ucard .sb{font-size:13px;color:var(--muted);margin-top:3px}
+  .ucard .ar{margin-left:auto;color:#c8d2ce;font-size:22px}
+  .life{margin:12px 14px 0;background:#fff;border-radius:var(--radius);padding:8px 6px 14px;box-shadow:var(--shadow-sm)}
+  .life .lh{padding:8px 16px;font-size:12px;color:var(--muted);letter-spacing:2px;font-weight:600}
+  .life .grid{display:flex;flex-wrap:wrap}
+  .life .it{width:50%;padding:10px 16px 12px}
+  .life .ik{font-size:12px;color:var(--muted)}
+  .life .iv{font-size:18px;font-weight:700;margin-top:5px}
+  .life .is{font-size:11px;color:var(--muted);margin-top:3px}
+  .menu{margin:12px 14px 16px;background:#fff;border-radius:var(--radius);padding:6px;box-shadow:var(--shadow-sm)}
+  .menu .mi{display:flex;align-items:center;padding:13px 14px;border-radius:16px}
+  .menu .mi:active{background:var(--bg)}
+  .menu .mk{width:32px;height:32px;border-radius:10px;background:var(--brand-soft);color:var(--brand-strong);
+    display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
+  .menu .mt{font-size:14px;font-weight:500;margin-left:10px;flex:1}
+  .menu .ma{color:#c8d2ce;font-size:18px}
+  .menu .ln{height:1px;background:var(--line);margin-left:56px}
+</style>
+</head>
+<body>
+  <div class="phone">
+    <div class="statusbar">
+      <span>9:41</span>
+      <span class="dots"><i></i><i></i><i></i></span>
+    </div>
+
+    <div class="screen" id="screen">
+      <!-- HOME -->
+      <div data-view="home">
+        <div class="hero">
+          <div class="blob"></div>
+          <div class="brand">旅途计划</div>
+          <div class="lead">下一趟，从这里出发</div>
+          <div class="acts">
+            <div class="btn solid">新建旅途</div>
+            <div class="btn ghost">加入旅途</div>
+          </div>
+        </div>
+
+        <div class="sec-title">进行中</div>
+
+        <div class="trip" onclick="goDetail()">
+          <div class="trow"><div class="name">川西小环线</div><span class="pill brand">示例</span></div>
+          <div class="sub"><span class="place">四姑娘山 · 丹巴 · 新都桥</span><span class="sep">·</span><span class="date">8月24日 – 8月28日</span></div>
+          <div class="count">还有 2 天出发 · 已排 12 个点</div>
+          <div class="meta">4 人同行 <span class="d"></span> 5 天 <span class="d"></span> 你是团长</div>
+        </div>
+
+        <div class="trip" onclick="goDetail()">
+          <div class="trow"><div class="name">大理慢生活</div><span class="pill gray">已归档</span></div>
+          <div class="sub"><span class="place">洱海 · 喜洲 · 双廊</span><span class="sep">·</span><span class="date">7月10日 – 7月14日</span></div>
+          <div class="count">可查看智能分账</div>
+          <div class="meta">2 人同行 <span class="d"></span> 5 天 <span class="d"></span> 你是成员</div>
+        </div>
+      </div>
+
+      <!-- DETAIL -->
+      <div data-view="detail" style="display:none">
+        <div class="topbar">
+          <div class="t">川西小环线</div>
+          <div class="mgmt">旅途管理</div>
+        </div>
+        <div class="map">
+          <svg viewBox="0 0 350 200" preserveAspectRatio="none">
+            <path d="M40 150 C90 120 120 60 170 80 S260 40 310 70" stroke="#6cbfa6" stroke-width="3" fill="none" stroke-dasharray="2 7" stroke-linecap="round" opacity=".7"/>
+          </svg>
+          <div class="pin" style="left:40px;top:150px"></div>
+          <div class="pin w" style="left:170px;top:80px"></div>
+          <div class="pin" style="left:310px;top:70px"></div>
+          <div class="full">⤢</div>
+        </div>
+
+        <div class="days">
+          <div class="chip on">全程</div>
+          <div class="chip">D1 · 8/24</div>
+          <div class="chip">D2 · 8/25</div>
+          <div class="chip">D3 · 8/26</div>
+        </div>
+
+        <div class="tabs">
+          <div class="tb on" onclick="switchTab(this,'plan')">行程</div>
+          <div class="tb" onclick="switchTab(this,'bill')">账单</div>
+          <div class="tb" onclick="switchTab(this,'member')">成员</div>
+        </div>
+
+        <!-- plan -->
+        <div class="plan" data-tab="plan">
+          <div class="item">
+            <div class="tl"><div class="dot"></div><div class="ln"></div></div>
+            <div class="main"><div class="nm">成都 · 集合出发</div><div class="ty">出发</div><div class="ar">到点 09:30 · 住宿已订</div></div>
+          </div>
+          <div class="item">
+            <div class="tl"><div class="dot"></div><div class="ln"></div></div>
+            <div class="main"><div class="nm">四姑娘山双桥沟</div><div class="ty">景点</div><div class="ar">到这里 约 3h20m · 门票 ¥150/人</div></div>
+          </div>
+          <div class="item">
+            <div class="tl"><div class="dot"></div></div>
+            <div class="main"><div class="nm">丹巴甲居藏寨</div><div class="ty">住宿</div><div class="ar">到这里 约 2h · 民宿含早</div></div>
+          </div>
+        </div>
+
+        <!-- bill -->
+        <div class="bill" data-tab="bill" style="display:none">
+          <div class="bstats">
+            <div class="card on"><div class="k">账单池</div><div class="v">¥3,420</div></div>
+            <div class="card"><div class="k">我的花销</div><div class="v">¥1,180</div></div>
+          </div>
+          <div class="cat card" style="margin-top:12px">
+            <div class="row"><span class="lab">餐饮</span><div class="bar"><i style="width:42%"></i></div><span class="amt">¥1,436</span></div>
+            <div class="row"><span class="lab">住宿</span><div class="bar"><i style="width:30%"></i></div><span class="amt">¥1,026</span></div>
+            <div class="row"><span class="lab">门票</span><div class="bar"><i style="width:18%"></i></div><span class="amt">¥615</span></div>
+            <div class="row"><span class="lab">交通</span><div class="bar"><i style="width:10%"></i></div><span class="amt">¥343</span></div>
+          </div>
+          <div class="blist">
+            <div class="b"><div><div class="nm">藏式火锅</div><div class="sub">小江 付 · 4 人均摊 · 餐饮</div></div><div class="a">¥328</div></div>
+            <div class="b"><div><div class="nm">甲居藏寨民宿</div><div class="sub">阿杰 付 · 2 人均摊 · 住宿</div></div><div class="a">¥560</div></div>
+            <div class="b"><div><div class="nm">双桥沟门票</div><div class="sub">小江 付 · 4 人均摊 · 门票</div></div><div class="a">¥600</div></div>
+          </div>
+        </div>
+
+        <!-- member -->
+        <div class="member" data-tab="member" style="display:none">
+          <div class="invite">
+            <div><div class="k">邀请码</div><div class="code">CX0824</div><div class="k" style="margin-top:4px">好友输入邀请码即可加入</div></div>
+            <div class="cp">复制</div>
+          </div>
+          <div class="gcard">
+            <div class="gh"><div class="l"><span style="width:8px;height:8px;border-radius:50%;background:var(--brand);display:inline-block"></span>小队</div><div class="n">4 人</div></div>
+            <div class="chips">
+              <div class="mc lead"><div class="av">江</div><span>小江</span></div>
+              <div class="mc"><div class="av">杰</div><span>阿杰</span></div>
+              <div class="mc"><div class="av">琳</div><span>琳琳</span></div>
+              <div class="mc"><div class="av">晨</div><span>晨晨</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PROFILE -->
+      <div data-view="profile" style="display:none">
+        <div class="ucard">
+          <div class="av">江</div>
+          <div><div class="nm">小江</div><div class="sb">点这里填写生日和性别</div></div>
+          <div class="ar">›</div>
+        </div>
+
+        <div class="life">
+          <div class="lh">工作余生</div>
+          <div class="grid">
+            <div class="it"><div class="ik">下次假期</div><div class="iv">国庆</div><div class="is">10月1日 · 还有 40 天</div></div>
+            <div class="it"><div class="ik">退休年龄</div><div class="iv">60 岁</div><div class="is">2045 年</div></div>
+            <div class="it"><div class="ik">还能放假</div><div class="iv">约 280 天</div><div class="is">每年可休</div></div>
+            <div class="it"><div class="ik">还要上班</div><div class="iv">约 19 年</div><div class="is">加油</div></div>
+          </div>
+        </div>
+
+        <div class="menu">
+          <div class="mi"><div class="mk">历</div><div class="mt">历史旅途</div><div class="ma">›</div></div>
+          <div class="ln"></div>
+          <div class="mi"><div class="mk">意</div><div class="mt">意见反馈</div><div class="ma">›</div></div>
+          <div class="ln"></div>
+          <div class="mi"><div class="mk">关</div><div class="mt">关于我们</div><div class="ma">›</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="nav" id="nav">
+      <button class="on" data-go="home" onclick="go('home',this)"><span class="ic">🧭</span>旅途</button>
+      <button data-go="profile" onclick="go('profile',this)"><span class="ic">👤</span>我的</button>
+    </div>
+  </div>
+
+<script>
+  function go(view,btn){
+    document.querySelectorAll('#screen>[data-view]').forEach(v=>v.style.display = v.dataset.view===view?'block':'none');
+    document.querySelectorAll('#nav button').forEach(b=>b.classList.remove('on'));
+    btn.classList.add('on');
+    document.getElementById('screen').scrollTop=0;
+  }
+  function goDetail(){
+    go('detail',document.querySelector('#nav button'));
+    document.querySelectorAll('#screen>[data-view]').forEach(v=>v.style.display = v.dataset.view==='detail'?'block':'none');
+    document.getElementById('screen').scrollTop=0;
+  }
+  function switchTab(el,name){
+    document.querySelectorAll('.tabs .tb').forEach(t=>t.classList.remove('on'));
+    el.classList.add('on');
+    document.querySelectorAll('.plan,.bill,.member').forEach(s=>{
+      s.style.display = s.dataset.tab===name ? 'block' : 'none';
+    });
+  }
+</script>
+</body>
+</html>

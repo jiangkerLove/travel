@@ -1,15 +1,16 @@
 <view class="home-page">
   <view class="hero">
+    <view class="hero-blob"></view>
     <view class="brand">旅途计划</view>
-    <view class="lead">一起把路线排好，慢慢走</view>
+    <view class="lead">下一趟，从这里出发</view>
     <view class="hero-actions">
       <view class="soft-btn main" bind:tap="goCreate">新建旅途</view>
-      <view class="soft-btn" bind:tap="goJoin">加入</view>
+      <view class="soft-btn" bind:tap="goJoin">加入旅途</view>
     </view>
   </view>
 
   <view class="section">
-    <view class="section-title">进行中</view>
+    <view class="section-title"><view class="sec-dot"></view>进行中</view>
     <view class="empty" wx:if="{{!list.length && !loading}}">
       <view class="empty-mark">🍃</view>
       <view class="empty-text">还没有旅途</view>
@@ -23,21 +24,19 @@
       bind:tap="openTrip"
       data-id="{{item.id}}"
     >
-      <view class="trip-top">
-        <view class="thumb">{{item.initial}}</view>
-        <view class="trip-main">
-          <view class="trip-title-row">
-            <view class="trip-title">{{item.travel_name}}</view>
-            <view class="pill-row">
-              <view class="soft-pill sample" wx:if="{{item.is_sample}}">示例</view>
-              <view class="soft-pill">{{item.status_text}}</view>
-            </view>
-          </view>
-          <view class="trip-place">{{item.destination}}</view>
-          <view class="trip-date">{{item.rangeText}}</view>
-          <view class="trip-count" wx:if="{{item.countdown}}">{{item.countdown}}</view>
+      <view class="trip-head">
+        <view class="trip-title">{{item.travel_name}}</view>
+        <view class="pill-row">
+          <view class="soft-pill sample" wx:if="{{item.is_sample}}">示例</view>
+          <view class="soft-pill">{{item.status_text}}</view>
         </view>
       </view>
+      <view class="trip-sub">
+        <text class="trip-place" wx:if="{{item.destination}}">{{item.destination}}</text>
+        <text class="sep" wx:if="{{item.destination && item.rangeText}}">·</text>
+        <text class="trip-date">{{item.rangeText}}</text>
+      </view>
+      <view class="trip-count" wx:if="{{item.countdown}}">{{item.countdown}}</view>
       <view class="trip-meta">
         <text>{{item.member_count}} 人同行</text>
         <text class="dot">·</text>

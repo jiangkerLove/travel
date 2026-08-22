@@ -1,11 +1,11 @@
 page {
-  background: #f3f6f3;
+  background: #f4f9f6;
 }
 
 .me-page {
   min-height: 100vh;
   padding: 24rpx 32rpx 80rpx;
-  background: #f3f6f3;
+  background: #f4f9f6;
   box-sizing: border-box;
 }
 
@@ -27,7 +27,7 @@ page {
   width: 112rpx;
   height: 112rpx;
   border-radius: 50%;
-  background: #e7f1eb;
+  background: #e9f6f0;
   flex-shrink: 0;
 }
 
@@ -35,7 +35,7 @@ page {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #5d8a76;
+  color: #4f9f8a;
   font-size: 40rpx;
   font-weight: 650;
 }
@@ -49,7 +49,7 @@ page {
 .nick {
   font-size: 34rpx;
   font-weight: 650;
-  color: #2f3d36;
+  color: #2f3b35;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -58,11 +58,11 @@ page {
 .sub {
   margin-top: 8rpx;
   font-size: 24rpx;
-  color: #8a9a90;
+  color: #8fa19a;
 }
 
 .arrow {
-  color: #c5d0c9;
+  color: #c8d6cf;
   font-size: 40rpx;
   line-height: 1;
   margin-left: 8rpx;
@@ -79,7 +79,7 @@ page {
 .life-head {
   padding: 0 20rpx 16rpx;
   font-size: 24rpx;
-  color: #8a9a90;
+  color: #8fa19a;
   letter-spacing: 4rpx;
 }
 
@@ -96,33 +96,33 @@ page {
 
 .life-k {
   font-size: 22rpx;
-  color: #8a9a90;
+  color: #8fa19a;
 }
 
 .life-v {
   margin-top: 10rpx;
   font-size: 34rpx;
   font-weight: 650;
-  color: #2f3d36;
+  color: #2f3b35;
   line-height: 1.25;
 }
 
 .life-v.muted {
   font-weight: 500;
-  color: #b4c2ba;
+  color: #b9ccc3;
 }
 
 .life-s {
   margin-top: 8rpx;
   font-size: 22rpx;
-  color: #9aa89f;
+  color: #97a8a1;
   line-height: 1.4;
 }
 
 .life-rows {
   margin: 4rpx 20rpx 16rpx;
   padding-top: 8rpx;
-  border-top: 1rpx solid #eef3ef;
+  border-top: 1rpx solid #edf5f0;
 }
 
 .life-row {
@@ -136,14 +136,14 @@ page {
 .life-row-k {
   flex-shrink: 0;
   font-size: 24rpx;
-  color: #8a9a90;
+  color: #8fa19a;
 }
 
 .life-row-v {
   min-width: 0;
   text-align: right;
   font-size: 24rpx;
-  color: #4f6f62;
+  color: #4f9f8a;
   line-height: 1.4;
 }
 
@@ -162,15 +162,15 @@ page {
 }
 
 .menu-item-hover {
-  background: #f6faf7;
+  background: #f4f9f6;
 }
 
 .menu-mark {
   width: 56rpx;
   height: 56rpx;
   border-radius: 16rpx;
-  background: #e7f1eb;
-  color: #5d8a76;
+  background: #e9f6f0;
+  color: #4f9f8a;
   font-size: 24rpx;
   font-weight: 650;
   display: flex;
@@ -183,11 +183,11 @@ page {
   flex: 1;
   margin-left: 20rpx;
   font-size: 30rpx;
-  color: #2f3d36;
+  color: #2f3b35;
 }
 
 .menu-arrow {
-  color: #c5d0c9;
+  color: #c8d6cf;
   font-size: 40rpx;
   line-height: 1;
 }
@@ -209,5 +209,5 @@ page {
   height: 1rpx;
   margin-left: 100rpx;
   margin-right: 24rpx;
-  background: #eef3ef;
+  background: #edf5f0;
 }

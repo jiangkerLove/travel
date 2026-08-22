@@ -1,5 +1,5 @@
 page {
-  background: #f3f6f3;
+  background: #f4f9f6;
 }
 
 .create-page {
@@ -9,7 +9,7 @@ page {
   background:
     radial-gradient(ellipse 80% 50% at 10% -10%, rgba(111, 155, 136, 0.16), transparent 55%),
     radial-gradient(ellipse 70% 40% at 100% 0%, rgba(215, 228, 220, 0.9), transparent 50%),
-    #f3f6f3;
+    #f4f9f6;
 }
 
 .intro {
@@ -19,14 +19,14 @@ page {
 .intro-title {
   font-size: 40rpx;
   font-weight: 650;
-  color: #2f3d36;
+  color: #2f3b35;
   letter-spacing: 1rpx;
 }
 
 .intro-sub {
   margin-top: 12rpx;
   font-size: 26rpx;
-  color: #7d8c84;
+  color: #8fa19a;
   line-height: 1.6;
 }
 
@@ -39,7 +39,7 @@ page {
 
 .field {
   padding: 24rpx 0;
-  border-bottom: 1rpx solid #eef3ef;
+  border-bottom: 1rpx solid #edf5f0;
 }
 
 .field.last {
@@ -51,7 +51,7 @@ page {
   align-items: flex-end;
   gap: 12rpx;
   padding: 8rpx 0;
-  border-bottom: 1rpx solid #eef3ef;
+  border-bottom: 1rpx solid #edf5f0;
 }
 
 .field.half {
@@ -64,51 +64,51 @@ page {
   flex-shrink: 0;
   padding-bottom: 30rpx;
   font-size: 22rpx;
-  color: #9aa89f;
+  color: #97a8a1;
 }
 
 .label {
   font-size: 22rpx;
-  color: #8a9a90;
+  color: #8fa19a;
   letter-spacing: 1rpx;
   margin-bottom: 12rpx;
 }
 
 .optional {
   margin-left: 8rpx;
-  color: #b4c2ba;
+  color: #b9ccc3;
   letter-spacing: 0;
 }
 
 .input {
   width: 100%;
   font-size: 30rpx;
-  color: #2f3d36;
+  color: #2f3b35;
   line-height: 1.4;
   min-height: 44rpx;
 }
 
 .picker {
   font-size: 30rpx;
-  color: #2f3d36;
+  color: #2f3b35;
   line-height: 1.4;
   min-height: 44rpx;
 }
 
 .picker.empty {
-  color: #b4c2ba;
+  color: #b9ccc3;
 }
 
 .area {
   width: 100%;
   min-height: 120rpx;
   font-size: 28rpx;
-  color: #2f3d36;
+  color: #2f3b35;
   line-height: 1.5;
 }
 
 .ph {
-  color: #b4c2ba;
+  color: #b9ccc3;
 }
 
 .soft-btn {
@@ -118,15 +118,15 @@ page {
   text-align: center;
   font-size: 30rpx;
   font-weight: 600;
-  color: #4f6f62;
+  color: #4f9f8a;
   background: rgba(255, 255, 255, 0.9);
-  border: 1rpx solid #d7e4dc;
+  border: 1rpx solid #d9ece3;
 }
 
 .soft-btn.main {
-  background: #6f9b88;
+  background: #6cbfa6;
   color: #fff;
-  border-color: #6f9b88;
+  border-color: #6cbfa6;
   box-shadow: 0 12rpx 28rpx rgba(111, 155, 136, 0.28);
 }
 
@@ -139,6 +139,6 @@ page {
   margin-top: 20rpx;
   text-align: center;
   font-size: 22rpx;
-  color: #9aa89f;
+  color: #97a8a1;
   line-height: 1.5;
 }

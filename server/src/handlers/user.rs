@@ -96,7 +96,7 @@ pub async fn login(
         .nickname
         .clone()
         .filter(|s| !s.trim().is_empty())
-        .unwrap_or_else(|| "旅行者".into());
+        .unwrap_or_else(crate::util::gen_nickname);
     let avatar = req.avatar.clone();
 
     let existing = sqlx::query_as::<_, crate::db::UserRow>(&format!(

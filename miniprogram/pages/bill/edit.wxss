@@ -1,5 +1,5 @@
 page {
-  background: #f3f6f3;
+  background: #f4f9f6;
 }
 
 .bill-page {
@@ -8,7 +8,7 @@ page {
   box-sizing: border-box;
   background:
     radial-gradient(ellipse 80% 45% at 0% -5%, rgba(111, 155, 136, 0.14), transparent 55%),
-    #f3f6f3;
+    #f4f9f6;
 }
 
 .type-switch {
@@ -26,11 +26,11 @@ page {
   padding: 18rpx 0;
   border-radius: 999rpx;
   font-size: 26rpx;
-  color: #7d8c84;
+  color: #8fa19a;
 }
 
 .type-item.on {
-  background: #6f9b88;
+  background: #6cbfa6;
   color: #fff;
   font-weight: 650;
 }
@@ -45,7 +45,7 @@ page {
 
 .amount-label {
   font-size: 22rpx;
-  color: #8a9a90;
+  color: #8fa19a;
   letter-spacing: 1rpx;
 }
 
@@ -58,7 +58,7 @@ page {
 .yen {
   font-size: 40rpx;
   font-weight: 650;
-  color: #6f9b88;
+  color: #6cbfa6;
   margin-right: 8rpx;
 }
 
@@ -66,7 +66,7 @@ page {
   flex: 1;
   font-size: 56rpx;
   font-weight: 650;
-  color: #2f3d36;
+  color: #2f3b35;
   height: 72rpx;
   line-height: 72rpx;
 }
@@ -74,16 +74,16 @@ page {
 .name-input {
   margin-top: 12rpx;
   padding-top: 18rpx;
-  border-top: 1rpx solid #eef3ef;
+  border-top: 1rpx solid #edf5f0;
   font-size: 28rpx;
-  color: #2f3d36;
+  color: #2f3b35;
   height: 48rpx;
 }
 
 .sec-label {
   margin: 8rpx 8rpx 14rpx;
   font-size: 22rpx;
-  color: #8a9a90;
+  color: #8fa19a;
   letter-spacing: 1rpx;
 }
 
@@ -103,15 +103,15 @@ page {
   padding: 12rpx 22rpx;
   border-radius: 999rpx;
   font-size: 24rpx;
-  color: #5d8a76;
+  color: #4f9f8a;
   background: #fff;
-  border: 1rpx solid #e2ebe5;
+  border: 1rpx solid #e6f2ec;
 }
 
 .chip.on {
-  background: #6f9b88;
+  background: #6cbfa6;
   color: #fff;
-  border-color: #6f9b88;
+  border-color: #6cbfa6;
 }
 
 .form-card {
@@ -127,7 +127,7 @@ page {
   align-items: center;
   justify-content: space-between;
   padding: 26rpx 0;
-  border-bottom: 1rpx solid #eef3ef;
+  border-bottom: 1rpx solid #edf5f0;
 }
 
 .field {
@@ -140,19 +140,19 @@ page {
 
 .field-k {
   font-size: 26rpx;
-  color: #8a9a90;
+  color: #8fa19a;
 }
 
 .field-v {
   font-size: 28rpx;
-  color: #2f3d36;
+  color: #2f3b35;
   font-weight: 550;
 }
 
 .opt {
   margin-left: 6rpx;
   font-size: 22rpx;
-  color: #b4c2ba;
+  color: #b9ccc3;
   font-weight: 400;
 }
 
@@ -161,12 +161,12 @@ page {
   margin-top: 12rpx;
   min-height: 80rpx;
   font-size: 28rpx;
-  color: #2f3d36;
+  color: #2f3b35;
   line-height: 1.5;
 }
 
 .ph {
-  color: #b4c2ba;
+  color: #b9ccc3;
 }
 
 .sec-head {
@@ -179,19 +179,19 @@ page {
 .sec-title {
   font-size: 28rpx;
   font-weight: 650;
-  color: #2f3d36;
+  color: #2f3b35;
 }
 
 .sec-act {
   font-size: 24rpx;
-  color: #6f9b88;
+  color: #6cbfa6;
   font-weight: 550;
 }
 
 .muted {
   margin-top: 6rpx;
   font-size: 22rpx;
-  color: #9aa89f;
+  color: #97a8a1;
   line-height: 1.4;
 }
 
@@ -209,22 +209,22 @@ page {
   min-width: 140rpx;
   padding: 16rpx 20rpx;
   border-radius: 18rpx;
-  background: #f3f6f3;
-  color: #4f6f62;
+  background: #f4f9f6;
+  color: #4f9f8a;
   font-size: 26rpx;
   border: 1rpx solid transparent;
 }
 
 .share-chip.on {
   background: rgba(111, 155, 136, 0.14);
-  border-color: #6f9b88;
-  color: #2f3d36;
+  border-color: #6cbfa6;
+  color: #2f3b35;
   font-weight: 550;
 }
 
 .share-g {
   font-size: 20rpx;
-  color: #9aa89f;
+  color: #97a8a1;
   font-weight: 400;
 }
 
@@ -272,6 +272,6 @@ page {
 .bar-btn.main {
   flex: 1.4;
   color: #fff;
-  background: #6f9b88;
+  background: #6cbfa6;
   box-shadow: 0 10rpx 24rpx rgba(111, 155, 136, 0.28);
 }

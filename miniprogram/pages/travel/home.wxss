@@ -1,6 +1,6 @@
 page {
   height: 100%;
-  background: #f3f6f3;
+  background: #f4f9f6;
 }
 
 .home {
@@ -8,14 +8,14 @@ page {
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  background: #f3f6f3;
+  background: #f4f9f6;
   overflow: hidden;
 }
 
 .top-fixed {
   flex-shrink: 0;
   padding: 8rpx 24rpx 0;
-  background: #f3f6f3;
+  background: #f4f9f6;
 }
 
 .hero {
@@ -34,7 +34,7 @@ page {
   min-width: 0;
   font-size: 30rpx;
   font-weight: 650;
-  color: #2f3d36;
+  color: #2f3b35;
   line-height: 1.3;
 }
 
@@ -42,7 +42,7 @@ page {
   flex-shrink: 0;
   padding: 8rpx 20rpx;
   border-radius: 999rpx;
-  background: #6f9b88;
+  background: #6cbfa6;
   color: #fff;
   font-size: 22rpx;
   font-weight: 600;
@@ -52,7 +52,7 @@ page {
 .hero-meta {
   margin-top: 4rpx;
   font-size: 22rpx;
-  color: #8a9a90;
+  color: #8fa19a;
   line-height: 1.3;
 }
 
@@ -73,7 +73,7 @@ page {
   position: relative;
   border-radius: 20rpx;
   /* 不要 overflow:hidden 裁切原生 map，否则中间区域会一直闪 */
-  background: #e7f1eb;
+  background: #e9f6f0;
 }
 
 .day-map {
@@ -107,13 +107,13 @@ page {
 }
 
 .home.is-map-full .map-fab {
-  background: #6f9b88;
+  background: #6cbfa6;
 }
 
 .day-sec {
   padding: 8rpx 4rpx 12rpx;
   font-size: 22rpx;
-  color: #8a9a90;
+  color: #8fa19a;
   letter-spacing: 1rpx;
 }
 
@@ -122,7 +122,7 @@ page {
   padding: 20rpx;
   border-radius: 16rpx;
   background: #fff;
-  color: #9aa89f;
+  color: #97a8a1;
   font-size: 22rpx;
   text-align: center;
 }
@@ -143,12 +143,12 @@ page {
   padding: 12rpx 20rpx;
   border-radius: 999rpx;
   background: #fff;
-  color: #5d8a76;
+  color: #4f9f8a;
   vertical-align: middle;
 }
 
 .day-chip.on {
-  background: #6f9b88;
+  background: #6cbfa6;
   color: #fff;
 }
 
@@ -168,8 +168,8 @@ page {
   line-height: 28rpx;
   padding: 0 6rpx;
   border-radius: 999rpx;
-  background: #e7f1eb;
-  color: #5d8a76;
+  background: #e9f6f0;
+  color: #4f9f8a;
   font-size: 18rpx;
   text-align: center;
 }
@@ -184,7 +184,7 @@ page {
   gap: 8rpx;
   margin: 4rpx 0 10rpx;
   padding: 4rpx;
-  background: #e7f1eb;
+  background: #e9f6f0;
   border-radius: 999rpx;
   max-height: 88rpx;
   overflow: hidden;
@@ -206,12 +206,12 @@ page {
   padding: 12rpx 0;
   border-radius: 999rpx;
   font-size: 24rpx;
-  color: #5d8a76;
+  color: #4f9f8a;
 }
 
 .tab.on {
   background: #fff;
-  color: #2f3d36;
+  color: #2f3b35;
   font-weight: 650;
 }
 
@@ -219,8 +219,8 @@ page {
   margin: 4rpx 0 10rpx;
   padding: 10rpx 16rpx;
   border-radius: 12rpx;
-  background: #eef6f1;
-  color: #4f6f62;
+  background: #ecf6f1;
+  color: #4f9f8a;
   font-size: 22rpx;
   line-height: 1.4;
   max-height: 80rpx;
@@ -271,8 +271,8 @@ page {
 }
 
 .empty-mark { font-size: 48rpx; margin-bottom: 8rpx; }
-.empty-title { font-size: 28rpx; color: #2f3d36; font-weight: 650; }
-.empty-sub { margin-top: 8rpx; margin-bottom: 28rpx; font-size: 22rpx; color: #8a9a90; }
+.empty-title { font-size: 28rpx; color: #2f3b35; font-weight: 650; }
+.empty-sub { margin-top: 8rpx; margin-bottom: 28rpx; font-size: 22rpx; color: #8fa19a; }
 
 .soft-btn {
   margin: 16rpx auto 0;
@@ -281,15 +281,15 @@ page {
   border-radius: 999rpx;
   text-align: center;
   font-size: 26rpx;
-  color: #4f6f62;
+  color: #4f9f8a;
   background: #fff;
-  border: 1rpx solid #d7e4dc;
+  border: 1rpx solid #d9ece3;
 }
 
 .soft-btn.main {
-  background: #6f9b88;
+  background: #6cbfa6;
   color: #fff;
-  border-color: #6f9b88;
+  border-color: #6cbfa6;
 }
 
 .soft-btn.mini {
@@ -301,7 +301,7 @@ page {
 .soft-btn.ghost {
   background: transparent;
   border-color: transparent;
-  color: #8a9a90;
+  color: #8fa19a;
 }
 
 .plan-list {
@@ -320,7 +320,7 @@ page {
 }
 
 .plan-row.is-start {
-  background: #eef6f1;
+  background: #ecf6f1;
   box-shadow: none;
 }
 
@@ -345,7 +345,7 @@ page {
   min-width: 0;
   font-size: 28rpx;
   font-weight: 650;
-  color: #2f3d36;
+  color: #2f3b35;
 }
 
 .plan-type {
@@ -353,8 +353,8 @@ page {
   margin-top: 2rpx;
   padding: 4rpx 12rpx;
   border-radius: 999rpx;
-  background: #eef6f1;
-  color: #5d8a76;
+  background: #ecf6f1;
+  color: #4f9f8a;
   font-size: 20rpx;
   font-weight: 550;
   line-height: 1.4;
@@ -367,7 +367,7 @@ page {
 .plan-sub {
   margin-top: 4rpx;
   font-size: 22rpx;
-  color: #8a9a90;
+  color: #8fa19a;
 }
 
 .plan-tip {
@@ -380,7 +380,7 @@ page {
 .plan-leg {
   margin-top: 8rpx;
   font-size: 22rpx;
-  color: #6f9b88;
+  color: #6cbfa6;
   line-height: 1.4;
 }
 
@@ -389,7 +389,7 @@ page {
   height: 64rpx;
   line-height: 64rpx;
   text-align: center;
-  color: #9aa89f;
+  color: #97a8a1;
   font-size: 34rpx;
   flex-shrink: 0;
 }
@@ -399,7 +399,7 @@ page {
   height: 64rpx;
   line-height: 64rpx;
   text-align: center;
-  color: #b0bfb6;
+  color: #b5c7bf;
   font-size: 26rpx;
   letter-spacing: 2rpx;
   flex-shrink: 0;
@@ -416,13 +416,13 @@ page {
 .place-name {
   font-size: 28rpx;
   font-weight: 650;
-  color: #2f3d36;
+  color: #2f3b35;
 }
 
 .place-sub {
   margin-top: 4rpx;
   font-size: 22rpx;
-  color: #8a9a90;
+  color: #8fa19a;
 }
 
 .stat-grid {
@@ -448,16 +448,16 @@ page {
   border-color: rgba(111, 155, 136, 0.35);
 }
 
-.stat-k { font-size: 22rpx; color: #8a9a90; }
+.stat-k { font-size: 22rpx; color: #8fa19a; }
 .stat-v {
   margin-top: 6rpx;
   font-size: 32rpx;
   font-weight: 650;
-  color: #2f3d36;
+  color: #2f3b35;
 }
 
 .stat.on .stat-v {
-  color: #4f6f62;
+  color: #4f9f8a;
 }
 
 .bill-hero {
@@ -479,25 +479,25 @@ page {
   margin-top: 12rpx;
   padding: 0 8rpx;
   font-size: 22rpx;
-  color: #9aa89f;
+  color: #97a8a1;
   line-height: 1.5;
 }
 
 .settle-title {
   font-size: 28rpx;
   font-weight: 650;
-  color: #2f3d36;
+  color: #2f3b35;
 }
 
 .settle-sub {
   margin-top: 4rpx;
   font-size: 22rpx;
-  color: #8a9a90;
+  color: #8fa19a;
 }
 
 .settle-arrow {
   font-size: 36rpx;
-  color: #b4c2ba;
+  color: #b9ccc3;
   line-height: 1;
 }
 
@@ -513,7 +513,7 @@ page {
   justify-content: space-between;
   padding: 8rpx 0;
   font-size: 26rpx;
-  color: #4f6f62;
+  color: #4f9f8a;
 }
 
 .list-head {
@@ -526,12 +526,12 @@ page {
 .list-title {
   font-size: 26rpx;
   font-weight: 650;
-  color: #2f3d36;
+  color: #2f3b35;
 }
 
 .list-count {
   font-size: 22rpx;
-  color: #9aa89f;
+  color: #97a8a1;
 }
 
 .list-add {
@@ -540,7 +540,7 @@ page {
   font-size: 24rpx;
   font-weight: 550;
   color: #fff;
-  background: #6f9b88;
+  background: #6cbfa6;
 }
 
 .bill-row {
@@ -558,12 +558,12 @@ page {
 .bill-amt {
   font-size: 30rpx;
   font-weight: 650;
-  color: #6f9b88;
+  color: #6cbfa6;
 }
 .bill-amt-sub {
   margin-top: 2rpx;
   font-size: 20rpx;
-  color: #9aa89f;
+  color: #97a8a1;
 }
 
 .invite-card {
@@ -584,14 +584,14 @@ page {
   margin-top: 6rpx;
   font-size: 40rpx;
   font-weight: 650;
-  color: #2f3d36;
+  color: #2f3b35;
   letter-spacing: 4rpx;
 }
 
 .invite-hint {
   margin-top: 6rpx;
   font-size: 22rpx;
-  color: #9aa89f;
+  color: #97a8a1;
 }
 
 .invite-copy {
@@ -600,14 +600,14 @@ page {
   border-radius: 999rpx;
   font-size: 24rpx;
   font-weight: 550;
-  color: #4f6f62;
-  background: #f3f6f3;
+  color: #4f9f8a;
+  background: #f4f9f6;
 }
 
 .member-tip {
   margin: -4rpx 4rpx 16rpx;
   font-size: 22rpx;
-  color: #9aa89f;
+  color: #97a8a1;
   line-height: 1.5;
 }
 
@@ -638,23 +638,23 @@ page {
   width: 10rpx;
   height: 10rpx;
   border-radius: 50%;
-  background: #c5d4cb;
+  background: #cad9d1;
   flex-shrink: 0;
 }
 
 .group-dot.on {
-  background: #6f9b88;
+  background: #6cbfa6;
 }
 
 .group-title {
   font-size: 24rpx;
   font-weight: 600;
-  color: #5d8a76;
+  color: #4f9f8a;
 }
 
 .group-n {
   font-size: 22rpx;
-  color: #9aa89f;
+  color: #97a8a1;
 }
 
 .member-wrap {
@@ -670,7 +670,7 @@ page {
   max-width: 100%;
   padding: 8rpx 14rpx 8rpx 8rpx;
   border-radius: 999rpx;
-  background: #f3f6f3;
+  background: #f4f9f6;
   border: 1rpx solid transparent;
 }
 
@@ -689,7 +689,7 @@ page {
   border-radius: 50%;
   background-size: cover;
   background-position: center;
-  background-color: #d7e4dc;
+  background-color: #d9ece3;
   flex-shrink: 0;
 }
 
@@ -699,12 +699,12 @@ page {
   justify-content: center;
   font-size: 20rpx;
   font-weight: 650;
-  color: #4f6f62;
+  color: #4f9f8a;
 }
 
 .m-name {
   font-size: 24rpx;
-  color: #2f3d36;
+  color: #2f3b35;
   max-width: 160rpx;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -716,12 +716,12 @@ page {
   padding: 2rpx 8rpx;
   border-radius: 6rpx;
   font-size: 18rpx;
-  color: #6f9b88;
+  color: #6cbfa6;
   background: rgba(111, 155, 136, 0.18);
 }
 
 .m-tag.soft {
-  color: #8a9a90;
+  color: #8fa19a;
   background: rgba(138, 154, 144, 0.16);
 }
 
@@ -737,7 +737,7 @@ page {
 .mgmt-title {
   padding: 20rpx 0 8rpx;
   font-size: 22rpx;
-  color: #9aa89f;
+  color: #97a8a1;
   letter-spacing: 1rpx;
 }
 
@@ -747,7 +747,7 @@ page {
   justify-content: space-between;
   gap: 16rpx;
   padding: 22rpx 0;
-  border-bottom: 1rpx solid #eef3ef;
+  border-bottom: 1rpx solid #edf5f0;
 }
 
 .mgmt-row.last {
@@ -757,13 +757,13 @@ page {
 .mgmt-k {
   font-size: 28rpx;
   font-weight: 550;
-  color: #2f3d36;
+  color: #2f3b35;
 }
 
 .mgmt-v {
   margin-top: 4rpx;
   font-size: 22rpx;
-  color: #9aa89f;
+  color: #97a8a1;
 }
 
 .danger-text { color: #c17b74; }
@@ -803,20 +803,20 @@ page {
 
 .edit-bar-btn.add {
   flex: 0.85;
-  color: #4f6f62;
+  color: #4f9f8a;
   background: #fff;
-  border: 1rpx solid #d7e4dc;
+  border: 1rpx solid #d9ece3;
 }
 
 .edit-bar-btn.ghost {
   flex: 0.95;
-  color: #4f6f62;
+  color: #4f9f8a;
   background: #fff;
-  border: 1rpx solid #d7e4dc;
+  border: 1rpx solid #d9ece3;
 }
 
 .edit-bar-btn.main {
   flex: 1.35;
   color: #fff;
-  background: #6f9b88;
+  background: #6cbfa6;
 }

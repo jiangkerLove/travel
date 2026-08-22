@@ -1,5 +1,5 @@
 page {
-  background: #f3f6f3;
+  background: #f4f9f6;
 }
 
 .edit-page {
@@ -16,7 +16,7 @@ page {
   z-index: 100;
   display: flex;
   flex-direction: column;
-  background: #f3f6f3;
+  background: #f4f9f6;
 }
 
 .search-top {
@@ -36,11 +36,11 @@ page {
 .search-input {
   height: 80rpx;
   font-size: 32rpx;
-  color: #2f3d36;
+  color: #2f3b35;
 }
 
 .search-ph {
-  color: #b0bfb6;
+  color: #b5c7bf;
   font-size: 32rpx;
 }
 
@@ -48,7 +48,7 @@ page {
   flex-shrink: 0;
   padding: 12rpx 4rpx;
   font-size: 28rpx;
-  color: #5d8a76;
+  color: #4f9f8a;
 }
 
 .search-list {
@@ -66,34 +66,34 @@ page {
 .blank-title {
   font-size: 34rpx;
   font-weight: 650;
-  color: #2f3d36;
+  color: #2f3b35;
 }
 
 .blank-sub {
   margin-top: 12rpx;
   font-size: 26rpx;
-  color: #8a9a90;
+  color: #8fa19a;
 }
 
 .poi {
   padding: 28rpx 40rpx;
-  border-bottom: 1rpx solid #eef3ef;
+  border-bottom: 1rpx solid #edf5f0;
 }
 
 .poi-hover {
-  background: #f6faf7;
+  background: #f4f9f6;
 }
 
 .poi-name {
   font-size: 32rpx;
-  color: #2f3d36;
+  color: #2f3b35;
   line-height: 1.4;
 }
 
 .poi-addr {
   margin-top: 8rpx;
   font-size: 24rpx;
-  color: #8a9a90;
+  color: #8fa19a;
   line-height: 1.4;
 }
 
@@ -118,7 +118,7 @@ page {
 
 .picked-k {
   font-size: 22rpx;
-  color: #8a9a90;
+  color: #8fa19a;
   letter-spacing: 2rpx;
 }
 
@@ -126,26 +126,26 @@ page {
   margin-top: 8rpx;
   font-size: 34rpx;
   font-weight: 650;
-  color: #2f3d36;
+  color: #2f3b35;
 }
 
 .picked-addr {
   margin-top: 8rpx;
   font-size: 24rpx;
-  color: #5d8a76;
+  color: #4f9f8a;
   line-height: 1.5;
 }
 
 .picked-change {
   flex-shrink: 0;
   font-size: 24rpx;
-  color: #6f9b88;
+  color: #6cbfa6;
 }
 
 .map-shell {
   margin-top: 20rpx;
   height: 360rpx;
-  background: #e7f1eb;
+  background: #e9f6f0;
 }
 
 .pick-map {
@@ -164,20 +164,20 @@ page {
 .form-title {
   font-size: 30rpx;
   font-weight: 650;
-  color: #2f3d36;
+  color: #2f3b35;
 }
 
 .block-label {
   margin: 28rpx 0 16rpx;
   font-size: 22rpx;
-  color: #8a9a90;
+  color: #8fa19a;
   letter-spacing: 3rpx;
 }
 
 .chip-hint {
   margin: -8rpx 0 14rpx;
   font-size: 22rpx;
-  color: #b4c2ba;
+  color: #b9ccc3;
   line-height: 1.4;
 }
 
@@ -190,13 +190,13 @@ page {
 .chip {
   padding: 14rpx 24rpx;
   border-radius: 999rpx;
-  background: #f3f6f3;
-  color: #4f6f62;
+  background: #f4f9f6;
+  color: #4f9f8a;
   font-size: 24rpx;
 }
 
 .chip.on {
-  background: #6f9b88;
+  background: #6cbfa6;
   color: #fff;
 }
 
@@ -206,31 +206,31 @@ page {
   margin-top: 16rpx;
   padding: 0 8rpx;
   min-height: 88rpx;
-  border-top: 1rpx solid #eef3ef;
+  border-top: 1rpx solid #edf5f0;
 }
 
 .field-k {
   width: 140rpx;
   font-size: 28rpx;
-  color: #2f3d36;
+  color: #2f3b35;
   flex-shrink: 0;
 }
 
 .field-v {
   flex: 1;
   font-size: 28rpx;
-  color: #2f3d36;
+  color: #2f3b35;
 }
 
 .field-ph {
-  color: #9aa89f;
+  color: #97a8a1;
   font-size: 24rpx;
 }
 
 .field-unit {
   margin-left: 12rpx;
   font-size: 24rpx;
-  color: #8a9a90;
+  color: #8fa19a;
 }
 
 .save-btn {
@@ -239,7 +239,7 @@ page {
   line-height: 88rpx;
   text-align: center;
   border-radius: 999rpx;
-  background: #6f9b88;
+  background: #6cbfa6;
   color: #fff;
   font-size: 30rpx;
   font-weight: 600;

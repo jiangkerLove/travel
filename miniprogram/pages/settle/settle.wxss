@@ -1,5 +1,5 @@
 page {
-  background: #f3f6f3;
+  background: #f4f9f6;
 }
 
 .settle-page {
@@ -8,7 +8,7 @@ page {
   box-sizing: border-box;
   background:
     radial-gradient(ellipse 80% 45% at 0% -5%, rgba(111, 155, 136, 0.12), transparent 55%),
-    #f3f6f3;
+    #f4f9f6;
 }
 
 .intro {
@@ -19,20 +19,20 @@ page {
 .intro-title {
   font-size: 28rpx;
   font-weight: 650;
-  color: #2f3d36;
+  color: #2f3b35;
 }
 
 .intro-sub {
   margin-top: 8rpx;
   font-size: 22rpx;
-  color: #8a9a90;
+  color: #8fa19a;
   line-height: 1.5;
 }
 
 .sec-title {
   margin: 20rpx 8rpx 14rpx;
   font-size: 22rpx;
-  color: #8a9a90;
+  color: #8fa19a;
   letter-spacing: 1rpx;
 }
 
@@ -46,7 +46,7 @@ page {
 
 .card.nested {
   margin-left: 0;
-  background: #f8faf8;
+  background: #f4f9f6;
   box-shadow: none;
 }
 
@@ -65,20 +65,20 @@ page {
 .title {
   font-size: 30rpx;
   font-weight: 650;
-  color: #2f3d36;
+  color: #2f3b35;
 }
 
 .muted {
   margin-top: 6rpx;
   font-size: 22rpx;
-  color: #9aa89f;
+  color: #97a8a1;
   line-height: 1.4;
 }
 
 .names {
   margin-top: 10rpx;
   font-size: 22rpx;
-  color: #7d8c84;
+  color: #8fa19a;
   line-height: 1.5;
 }
 
@@ -96,7 +96,7 @@ page {
   padding: 28rpx;
   text-align: center;
   font-size: 24rpx;
-  color: #9aa89f;
+  color: #97a8a1;
   background: #fff;
   border-radius: 24rpx;
 }
@@ -114,7 +114,7 @@ page {
   margin: 4rpx 8rpx 12rpx;
   font-size: 26rpx;
   font-weight: 600;
-  color: #5d8a76;
+  color: #4f9f8a;
 }
 
 .soft-btn {
@@ -124,13 +124,13 @@ page {
   text-align: center;
   font-size: 28rpx;
   font-weight: 600;
-  color: #4f6f62;
+  color: #4f9f8a;
   background: #fff;
-  border: 1rpx solid #d7e4dc;
+  border: 1rpx solid #d9ece3;
 }
 
 .soft-btn.main {
-  background: #6f9b88;
+  background: #6cbfa6;
   color: #fff;
-  border-color: #6f9b88;
+  border-color: #6cbfa6;
 }
