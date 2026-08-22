@@ -23,20 +23,20 @@ page {
   position: absolute;
   top: -60rpx;
   right: -50rpx;
-  width: 260rpx;
-  height: 260rpx;
+  width: 220rpx;
+  height: 220rpx;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(124, 202, 180, 0.32) 0%, rgba(124, 202, 180, 0) 70%);
+  background: radial-gradient(circle, rgba(124, 202, 180, 0.22) 0%, rgba(124, 202, 180, 0) 70%);
   pointer-events: none;
 }
 
 .hero-art {
   position: absolute;
-  right: 12rpx;
-  bottom: 18rpx;
-  width: 240rpx;
-  height: 160rpx;
-  opacity: 0.55;
+  top: 16rpx;
+  right: 16rpx;
+  width: 200rpx;
+  height: 150rpx;
+  opacity: 0.5;
   pointer-events: none;
 }
 
