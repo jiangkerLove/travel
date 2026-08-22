@@ -1,9 +1,22 @@
-use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
+use chrono::{FixedOffset, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use rand::Rng;
 use rust_decimal::prelude::{FromPrimitive, ToPrimitive};
 use rust_decimal::Decimal;
 
 use crate::error::AppError;
+
+/// 上海时区（中国标准时间，无夏令时）
+pub fn shanghai_offset() -> FixedOffset {
+    FixedOffset::east_opt(8 * 3600).expect("UTC+8")
+}
+
+pub fn shanghai_now() -> NaiveDateTime {
+    Utc::now().with_timezone(&shanghai_offset()).naive_local()
+}
+
+pub fn shanghai_today() -> NaiveDate {
+    shanghai_now().date()
+}
 
 pub fn gen_invite_code() -> String {
     const CHARS: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";

@@ -126,7 +126,7 @@ fn to_vo(t: &TravelRow, member_count: i64, role: i16, can_edit: bool, can_bill: 
         countdown: crate::worklife::trip_countdown(
             t.start_date,
             t.end_date,
-            chrono::Local::now().date_naive(),
+            crate::util::shanghai_today(),
         ),
     }
 }

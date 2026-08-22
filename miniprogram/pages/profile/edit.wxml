@@ -63,11 +63,11 @@
       </picker>
     </block>
     <view class="line"></view>
-    <picker mode="date" fields="year" value="{{workYearValue}}" start="1960-01-01" end="{{today}}" bindchange="onWorkYear">
+    <picker mode="date" fields="month" value="{{workMonthValue}}" start="1960-01" end="{{workMonthEnd}}" bindchange="onWorkMonth">
       <view class="cell">
-        <text class="label">工作年份</text>
+        <text class="label">参加工作</text>
         <view class="cell-right">
-          <text class="val {{workStartYear ? '' : 'ph'}}">{{workStartYear ? workStartYear + ' 年' : '选填，估算年假'}}</text>
+          <text class="val {{workStartYear ? '' : 'ph'}}">{{workStartText || '选填，统计已工作时长'}}</text>
           <text class="chev">›</text>
         </view>
       </view>

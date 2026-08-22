@@ -35,6 +35,7 @@ pub struct UserVo {
     pub gender: i16,
     pub female_role: i16,
     pub work_start_year: Option<i32>,
+    pub work_start_month: Option<i16>,
     pub work_life: Option<crate::worklife::WorkLifeVo>,
 }
 
@@ -49,11 +50,13 @@ fn user_vo(u: &crate::db::UserRow) -> UserVo {
         gender: u.gender,
         female_role: u.female_role,
         work_start_year: u.work_start_year,
+        work_start_month: u.work_start_month,
         work_life: crate::worklife::build_work_life(
             u.birthday,
             u.gender,
             u.female_role,
             u.work_start_year,
+            u.work_start_month,
         ),
     }
 }
@@ -72,6 +75,8 @@ pub struct UpdateUserReq {
     pub female_role: Option<i16>,
     #[serde(default, alias = "workStartYear")]
     pub work_start_year: Option<i32>,
+    #[serde(default, alias = "workStartMonth")]
+    pub work_start_month: Option<i16>,
     pub gender: Option<i16>,
 }
 
@@ -234,10 +239,21 @@ pub async fn update(
             return Err(AppError::BadRequest("岗位类型不合法".into()));
         }
     }
-    let this_year = chrono::Local::now().year();
+    let today = crate::util::shanghai_today();
+    let this_year = today.year();
     if let Some(y) = req.work_start_year {
         if y < 1960 || y > this_year {
-            return Err(AppError::BadRequest("参加工作年份不合法".into()));
+            return Err(AppError::BadRequest("参加工作时间不合法".into()));
+        }
+    }
+    if let Some(m) = req.work_start_month {
+        if !(1..=12).contains(&m) {
+            return Err(AppError::BadRequest("参加工作月份不合法".into()));
+        }
+        if let Some(y) = req.work_start_year {
+            if y == this_year && m as u32 > today.month() {
+                return Err(AppError::BadRequest("参加工作时间不能晚于本月".into()));
+            }
         }
     }
     let sql = format!(
@@ -249,7 +265,8 @@ pub async fn update(
             birthday = COALESCE($5::date, birthday),
             gender = COALESCE($6::smallint, gender),
             female_role = COALESCE($7::smallint, female_role),
-            work_start_year = COALESCE($8::int, work_start_year)
+            work_start_year = COALESCE($8::int, work_start_year),
+            work_start_month = COALESCE($9::smallint, work_start_month)
         WHERE id = $1
         RETURNING {USER_COLS}
         "#
@@ -263,6 +280,7 @@ pub async fn update(
         .bind(req.gender)
         .bind(req.female_role)
         .bind(req.work_start_year)
+        .bind(req.work_start_month)
         .fetch_one(&state.pool)
         .await?;
     Ok(ok(user_vo(&u)))
@@ -274,7 +292,7 @@ fn parse_birthday(raw: Option<&str>) -> Result<Option<NaiveDate>, AppError> {
     };
     let date = NaiveDate::parse_from_str(s, "%Y-%m-%d")
         .map_err(|_| AppError::BadRequest("出生日期不合法".into()))?;
-    let today = chrono::Local::now().date_naive();
+    let today = crate::util::shanghai_today();
     if date.year() < 1920 || date > today {
         return Err(AppError::BadRequest("出生日期不合法".into()));
     }

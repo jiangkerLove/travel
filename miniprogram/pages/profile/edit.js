@@ -10,6 +10,17 @@ function todayStr() {
   return `${n.getFullYear()}-${m}-${d}`
 }
 
+function monthStr(d = new Date()) {
+  const m = `${d.getMonth() + 1}`.padStart(2, '0')
+  return `${d.getFullYear()}-${m}`
+}
+
+function workStartText(year, month) {
+  if (!year) return ''
+  const m = Number(month) || 1
+  return `${year}年${m}月`
+}
+
 function decorateUser(user) {
   const u = user || {}
   const name = (u.nickname || '旅行者').trim() || '旅行者'
@@ -47,7 +58,10 @@ Page({
     roleLabel: ROLE_RANGE[0],
     roleRange: ROLE_RANGE,
     workStartYear: 0,
-    workYearValue: todayStr(),
+    workStartMonth: 0,
+    workMonthValue: monthStr(),
+    workMonthEnd: monthStr(),
+    workStartText: '',
     today: todayStr(),
     dirty: false,
     saving: false,
@@ -60,6 +74,7 @@ Page({
     const gender = Number(u.gender) || 0
     const femaleRole = Number(u.female_role) || 0
     const workStartYear = Number(u.work_start_year) || 0
+    const workStartMonth = Number(u.work_start_month) || (workStartYear ? 1 : 0)
     const birthday = u.birthday || ''
     this._origin = {
       avatar: u.avatar || '',
@@ -68,6 +83,7 @@ Page({
       gender,
       femaleRole,
       workStartYear,
+      workStartMonth,
     }
     this.setData({
       avatar: this._origin.avatar,
@@ -82,7 +98,12 @@ Page({
       femaleRole,
       roleLabel: ROLE_RANGE[femaleRole] || ROLE_RANGE[0],
       workStartYear,
-      workYearValue: workStartYear ? `${workStartYear}` : `${new Date().getFullYear()}`,
+      workStartMonth,
+      workMonthValue: workStartYear
+        ? `${workStartYear}-${String(workStartMonth || 1).padStart(2, '0')}`
+        : monthStr(),
+      workMonthEnd: monthStr(),
+      workStartText: workStartText(workStartYear, workStartMonth),
       dirty: false,
     })
   },
@@ -94,6 +115,7 @@ Page({
       gender: Number(this.data.gender) || 0,
       femaleRole: Number(this.data.femaleRole) || 0,
       workStartYear: Number(this.data.workStartYear) || 0,
+      workStartMonth: Number(this.data.workStartMonth) || 0,
     }
   },
   markDirty() {
@@ -105,7 +127,8 @@ Page({
       n.birthday !== (o.birthday || '') ||
       n.gender !== Number(o.gender) ||
       n.femaleRole !== Number(o.femaleRole) ||
-      n.workStartYear !== Number(o.workStartYear)
+      n.workStartYear !== Number(o.workStartYear) ||
+      n.workStartMonth !== Number(o.workStartMonth)
     if (dirty !== this.data.dirty) this.setData({ dirty })
   },
   onChooseAvatar(e) {
@@ -143,12 +166,18 @@ Page({
       roleLabel: ROLE_RANGE[femaleRole],
     }, () => this.markDirty())
   },
-  onWorkYear(e) {
+  onWorkMonth(e) {
     const raw = (e.detail && e.detail.value) || ''
-    const workStartYear = Number(String(raw).slice(0, 4)) || 0
+    const parts = String(raw).split('-')
+    const workStartYear = Number(parts[0]) || 0
+    const workStartMonth = Number(parts[1]) || 1
     this.setData({
       workStartYear,
-      workYearValue: workStartYear ? `${workStartYear}` : `${new Date().getFullYear()}`,
+      workStartMonth,
+      workMonthValue: workStartYear
+        ? `${workStartYear}-${String(workStartMonth).padStart(2, '0')}`
+        : monthStr(),
+      workStartText: workStartText(workStartYear, workStartMonth),
     }, () => this.markDirty())
   },
   async onSave() {
@@ -167,7 +196,10 @@ Page({
     if (this.data.birthday) payload.birthday = this.data.birthday
     if (this.data.gender === 1 || this.data.gender === 2) payload.gender = this.data.gender
     payload.female_role = Number(this.data.femaleRole) || 0
-    if (this.data.workStartYear) payload.work_start_year = Number(this.data.workStartYear)
+    if (this.data.workStartYear) {
+      payload.work_start_year = Number(this.data.workStartYear)
+      payload.work_start_month = Number(this.data.workStartMonth) || 1
+    }
     this.setData({ saving: true })
     wx.showLoading({ title: '保存中' })
     try {

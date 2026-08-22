@@ -98,7 +98,7 @@ pub async fn create_sample_travel(
     invite_code: Option<&str>,
 ) -> Result<i64, AppError> {
     // 已结束的四天行程，便于直接看账单与分账
-    let end = chrono::Local::now().date_naive() - Duration::days(7);
+    let end = crate::util::shanghai_today() - Duration::days(7);
     let start = end - Duration::days(3);
     create_sample_travel_with_dates(pool, creator_id, companion_ids, invite_code, start, end).await
 }

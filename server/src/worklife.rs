@@ -1,6 +1,8 @@
-use chrono::{Datelike, Duration, Local, NaiveDate, NaiveDateTime, Weekday};
+use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, Weekday};
 use serde::Serialize;
 use std::collections::HashSet;
+
+use crate::util::shanghai_now;
 
 const LUNAR: [u32; 201] = [
     0x04bd8, 0x04ae0, 0x0a570, 0x054d5, 0x0d260, 0x0d950, 0x16554, 0x056a0, 0x09ad0, 0x055d2,
@@ -68,7 +70,7 @@ struct Span {
 }
 
 fn now() -> NaiveDateTime {
-    Local::now().naive_local()
+    shanghai_now()
 }
 
 fn ymd(y: i32, m: u32, d: u32) -> NaiveDate {
@@ -468,22 +470,6 @@ fn retirement_of(birth: NaiveDate, gender: i16, female_role: i16) -> Retire {
     }
 }
 
-fn annual_leave_days(years: i32) -> i32 {
-    if years < 1 {
-        0
-    } else if years < 10 {
-        5
-    } else if years < 20 {
-        10
-    } else {
-        15
-    }
-}
-
-fn year_length(year: i32) -> i64 {
-    diff_days(ymd(year, 1, 1), ymd(year + 1, 1, 1))
-}
-
 fn clamp_range(
     from: NaiveDate,
     to: NaiveDate,
@@ -497,28 +483,6 @@ fn clamp_range(
     } else {
         None
     }
-}
-
-fn annual_leave_slice(year: i32, from: NaiveDate, to: NaiveDate, work_start_year: i32) -> f64 {
-    let days = annual_leave_days(year - work_start_year);
-    if days == 0 {
-        return 0.0;
-    }
-    let Some((a, b)) = clamp_range(from, to, ymd(year, 1, 1), ymd(year + 1, 1, 1)) else {
-        return 0.0;
-    };
-    days as f64 * diff_days(a, b) as f64 / year_length(year) as f64
-}
-
-fn annual_leave_in_range(from: NaiveDate, to: NaiveDate, work_start_year: i32) -> i64 {
-    if from >= to {
-        return 0;
-    }
-    let mut total = 0.0;
-    for y in from.year()..=to.year() {
-        total += annual_leave_slice(y, from, to, work_start_year);
-    }
-    total.round() as i64
 }
 
 fn holiday_weekdays(from: NaiveDate, to: NaiveDate) -> HashSet<NaiveDate> {
@@ -540,7 +504,7 @@ fn holiday_weekdays(from: NaiveDate, to: NaiveDate) -> HashSet<NaiveDate> {
     keys
 }
 
-fn count_span(from: NaiveDate, to: NaiveDate, work_start_year: i32) -> Span {
+fn count_span(from: NaiveDate, to: NaiveDate) -> Span {
     if from >= to {
         return Span { work: 0, rest: 0 };
     }
@@ -559,14 +523,9 @@ fn count_span(from: NaiveDate, to: NaiveDate, work_start_year: i32) -> Span {
         }
         cur = add_days(cur, 1);
     }
-    let leave = if work_start_year != 0 {
-        annual_leave_in_range(from, to, work_start_year).min(work)
-    } else {
-        0
-    };
     Span {
-        work: work - leave,
-        rest: weekends + holiday + leave,
+        work,
+        rest: weekends + holiday,
     }
 }
 
@@ -663,7 +622,7 @@ pub fn trip_countdown(start: NaiveDate, end: NaiveDate, now: NaiveDate) -> Strin
         return "已结束".into();
     }
     if start > now {
-        let span = count_span(now, start, 0);
+        let span = count_span(now, start);
         if span.work > 0 {
             format!("还有 {} 天出发 · 要上 {} 个工作日", span.work + span.rest, span.work)
         } else {
@@ -684,6 +643,7 @@ pub fn build_work_life(
     gender: i16,
     female_role: i16,
     work_start_year: Option<i32>,
+    work_start_month: Option<i16>,
 ) -> Option<WorkLifeVo> {
     let now = now();
     let today = now.date();
@@ -711,13 +671,17 @@ pub fn build_work_life(
             work_hint: "已退休".into(),
         });
     }
-    let work_start = work_start_year.unwrap_or(birth.year() + 22);
-    let all = count_span(today, retire.date, work_start);
+    let work_year = work_start_year.unwrap_or(birth.year() + 22);
+    let work_month = work_start_month
+        .filter(|m| (1..=12).contains(m))
+        .unwrap_or(1) as u32;
+    let work_from = ymd(work_year, work_month, 1);
+    let all = count_span(today, retire.date);
     let same_year = today.year() == retire.date.year();
     let mut extras = Vec::new();
     if let Some((a, b)) = clamp_range(today, retire.date, ymd(today.year(), 1, 1), ymd(today.year() + 1, 1, 1))
     {
-        let span = count_span(a, b, work_start);
+        let span = count_span(a, b);
         extras.push(ExtraRow {
             k: if same_year {
                 "今年 · 退休年".into()
@@ -735,7 +699,7 @@ pub fn build_work_life(
         if let Some((a, b)) =
             clamp_range(today, retire.date, ymd(retire.date.year(), 1, 1), ymd(retire.date.year() + 1, 1, 1))
         {
-            let span = count_span(a, b, work_start);
+            let span = count_span(a, b);
             extras.push(ExtraRow {
                 k: format!("{} 年退休前", retire.date.year()),
                 v: format!(
@@ -760,7 +724,6 @@ pub fn build_work_life(
         },
     });
     extras.push(break_countdown(now));
-    let work_from = ymd(work_start, 1, 1);
     if today > work_from {
         extras.push(ExtraRow {
             k: "已经工作".into(),

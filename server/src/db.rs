@@ -5,7 +5,7 @@ use sqlx::PgPool;
 use crate::error::AppError;
 use crate::route::LatLng;
 
-pub const USER_COLS: &str = "id, open_id, nickname, avatar, default_bill_visible, birthday, gender, female_role, work_start_year";
+pub const USER_COLS: &str = "id, open_id, nickname, avatar, default_bill_visible, birthday, gender, female_role, work_start_year, work_start_month";
 
 #[derive(sqlx::FromRow, Clone)]
 #[allow(dead_code)]
@@ -19,6 +19,7 @@ pub struct UserRow {
     pub gender: i16,
     pub female_role: i16,
     pub work_start_year: Option<i32>,
+    pub work_start_month: Option<i16>,
 }
 
 #[derive(sqlx::FromRow, Clone)]
@@ -201,7 +202,7 @@ pub async fn list_plans(pool: &PgPool, travel_id: i64, day_num: Option<i32>) -> 
 pub fn status_text(status: i16, end_date: NaiveDate) -> &'static str {
     if status == 2 {
         "已归档"
-    } else if end_date < chrono::Local::now().date_naive() {
+    } else if end_date < crate::util::shanghai_today() {
         "已结束"
     } else {
         "进行中"
@@ -211,7 +212,7 @@ pub fn status_text(status: i16, end_date: NaiveDate) -> &'static str {
 pub fn display_status(status: i16, end_date: NaiveDate) -> i16 {
     if status == 2 {
         2
-    } else if end_date < chrono::Local::now().date_naive() {
+    } else if end_date < crate::util::shanghai_today() {
         1
     } else {
         0
