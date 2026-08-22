@@ -158,6 +158,7 @@ Page({
     aiMode: 'plan',
     aiPending: false,
     aiEntry: false,
+    aiIntro: '',
     dayPickOpen: false,
     dayPickTitle: '加到哪一天',
     dayPickDays: [],
@@ -776,7 +777,7 @@ Page({
   async finishEdit() {
     if (this.data.generating) return
     this._aiBackup = null
-    this.setData({ aiPending: false, aiEntry: false, aiOpen: false })
+    this.setData({ aiPending: false, aiEntry: false, aiOpen: false, aiIntro: '' })
     const hasAny = (this.data.days || []).some((d) => (d.plans || []).length)
     this.setData({ generating: true })
     wx.showLoading({ title: hasAny ? '保存并预览' : '保存中', mask: true })
@@ -795,6 +796,11 @@ Page({
       this.setData({ generating: false })
       wx.hideLoading()
     }
+  },
+  keepAi() {
+    this._aiBackup = null
+    this.setData({ aiPending: false, aiEntry: false, aiIntro: '' })
+    wx.showToast({ title: '已保存', icon: 'success' })
   },
   openAi({ all } = {}) {
     if (!this.data.canEdit) {
@@ -838,10 +844,10 @@ Page({
     if (this.data.aiLoading) return
     const backup = this._aiBackup
     if (!backup) {
-      this.setData({ aiOpen: false, aiPending: false })
+      this.setData({ aiOpen: false, aiPending: false, aiIntro: '' })
       return
     }
-    wx.showLoading({ title: '还原中', mask: true })
+    wx.showLoading({ title: '取消中', mask: true })
     try {
       await api.planAiApply({
         travel_id: this.data.id,
@@ -851,11 +857,11 @@ Page({
       this._aiBackup = null
       this._mapCache = null
       this._mapDrawKey = ''
-      this.setData({ aiOpen: false, aiPending: false, aiEntry: false, routesReady: false })
+      this.setData({ aiOpen: false, aiPending: false, aiEntry: false, aiIntro: '', routesReady: false })
       await this.loadPlans({ withRoutes: false })
-      wx.showToast({ title: '已还原', icon: 'none' })
+      wx.showToast({ title: '已取消', icon: 'none' })
     } catch (e) {
-      wx.showToast({ title: (e && e.message) || '还原失败', icon: 'none' })
+      wx.showToast({ title: (e && e.message) || '取消失败', icon: 'none' })
     } finally {
       wx.hideLoading()
     }
@@ -883,10 +889,10 @@ Page({
             ? (dayNum ? `给 D${dayNum} 加推荐？` : '沿现有路线推荐？')
             : (dayNum ? `改写 D${dayNum}？` : '按 AI 重排全程？'),
           content: recommend
-            ? '会保留现有地点，在顺路位置插入推荐景点。不满意可还原。'
+            ? '会保留现有地点，在顺路位置插入推荐景点。不合适可取消或再生成。'
             : (dayNum
-              ? '只改这一天，写进行程后可预览路线。不满意再还原。'
-              : '会按 AI 结果写入行程，和其他地点一样。不满意可还原。'),
+              ? '只改这一天。生成后看路线，合适再保存。'
+              : '会按 AI 结果排进行程。生成后看路线，合适再保存。'),
           confirmText: recommend ? '推荐' : '生成',
           success: (r) => resolve(r.confirm),
         })
@@ -913,10 +919,17 @@ Page({
       const dayIndex = dayNum
         ? Math.max(0, (this.data.days || []).findIndex((d) => d.day_num === dayNum))
         : this.data.dayIndex
+      const dayDraft = ((draft && draft.days) || []).find((d) => d.day_num === dayNum)
+        || ((draft && draft.days) || [])[0]
+      const aiIntro = (dayNum
+        ? ((dayDraft && dayDraft.theme) || (draft && draft.summary) || `D${dayNum} 已排好`)
+        : ((draft && draft.summary) || '行程已排好')
+      ).trim()
       this.setData({
         aiOpen: false,
         aiPending: true,
-        aiEntry: true,
+        aiEntry: false,
+        aiIntro,
         routesReady: false,
         mapScope: dayNum ? 'day' : 'all',
         dayIndex: dayNum ? dayIndex : -1,

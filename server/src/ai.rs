@@ -233,7 +233,7 @@ async fn chat_json(api_key: &str, user_content: String) -> Result<ModelOut, AppE
         "messages": [
             {
                 "role": "system",
-                "content": "你是旅行行程规划助手。只输出 JSON，不要解释。按游览顺序排点，地点用中国大陆景区/店铺常用名，要能被高德搜到。避开用户明确不想去的地方。每天 2-5 个点。point_type 只能是 sight/hotel/food/gas/transport。query 写成「城市 地点」。arrive 用 HH:MM。note 只写一句必要提醒，不要写攻略。"
+                "content": "你是旅行行程规划助手。只输出 JSON，不要解释。按游览顺序排点，地点用中国大陆景区/店铺常用名，要能被高德搜到。避开用户明确不想去的地方。每天 2-5 个点。point_type 只能是 sight/hotel/food/gas/transport。query 写成「城市 地点」。arrive 用 HH:MM。note 只写一句必要提醒。summary 写给人看的介绍：排全程就用一两句话讲整趟怎么走，只改一天就介绍这一天。theme 也写当天一句话介绍。"
             },
             { "role": "user", "content": user_content }
         ]

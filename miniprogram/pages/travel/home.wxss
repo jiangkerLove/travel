@@ -230,14 +230,21 @@ page {
 
 .edit-banner.has-act {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16rpx;
+  max-height: 160rpx;
+}
+
+.edit-banner-txt {
+  flex: 1;
+  min-width: 0;
 }
 
 .edit-banner-act {
   flex-shrink: 0;
   font-weight: 650;
+  padding-top: 2rpx;
 }
 
 .home.is-map-full .edit-banner {

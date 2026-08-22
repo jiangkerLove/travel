@@ -68,8 +68,8 @@
       <view class="tab {{tab === 'member' ? 'on' : ''}}" bind:tap="setTab" data-v="member">成员</view>
     </view>
     <view class="edit-banner has-act" wx:elif="{{aiPending}}">
-      <text>AI 已写入 · 和手动排点一样，可预览路线</text>
-      <text class="edit-banner-act" catch:tap="cancelAi">还原</text>
+      <text class="edit-banner-txt">{{aiIntro}}</text>
+      <text class="edit-banner-act" catch:tap="cancelAi">取消</text>
     </view>
     <view class="edit-banner" wx:elif="{{!routesReady}}">
       <text>排点中 · 预览后看路线与用时</text>
@@ -296,7 +296,12 @@
     <t-fab icon="add" bind:click="addBill" />
   </view>
 
-  <view class="edit-bar" wx:if="{{mode === 'edit'}}">
+  <view class="edit-bar" wx:if="{{mode === 'edit' && aiPending}}">
+    <view class="edit-bar-btn ghost" bind:tap="cancelAi">取消</view>
+    <view class="edit-bar-btn add" bind:tap="openAi">再生成</view>
+    <view class="edit-bar-btn main" bind:tap="keepAi">保存</view>
+  </view>
+  <view class="edit-bar" wx:elif="{{mode === 'edit'}}">
     <view class="edit-bar-btn ai" bind:tap="openAi">AI 排程</view>
     <view class="edit-bar-btn add" bind:tap="quickAddEnd">＋ 地点</view>
     <view class="edit-bar-btn ghost" bind:tap="generateRoutes">{{routesReady ? '重预览' : '预览'}}</view>
@@ -328,7 +333,7 @@
       </view>
       <scroll-view scroll-y class="ai-body" enhanced show-scrollbar="{{false}}">
         <view class="ai-hint" wx:if="{{aiMode === 'recommend'}}">按现在的路线推荐顺路景点，原地点会保留。可以写偏好，也可以直接推荐。</view>
-        <view class="ai-hint" wx:elif="{{aiDayNum === 0}}">粘贴小红书等链接，或写要去哪、必去和不去的地方。生成后写入行程，可预览路线，不满意再还原。</view>
+        <view class="ai-hint" wx:elif="{{aiDayNum === 0}}">粘贴小红书等链接，或写要去哪、必去和不去的地方。生成后收起看路线，合适再保存。</view>
         <view class="ai-hint" wx:else>只改 D{{aiDayNum}}。可以写「加上洱海骑行」「晚饭换一家」「去掉喜洲」，没提到的地点会尽量保留。</view>
         <textarea
           class="ai-input"
