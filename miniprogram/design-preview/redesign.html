@@ -61,27 +61,38 @@
   .pill.gray{color:#777;background:#f0f0f0}
 
   /* ---------- HOME ---------- */
-  .hero{margin:10px 16px 2px;padding:18px 20px 20px;border-radius:22px;position:relative;overflow:hidden;
-    background:linear-gradient(135deg,#eaf7f1 0%,#f6fbf8 70%);border:1px solid #e3f2ea}
-  .hero .blob{position:absolute;top:-30px;right:-25px;width:110px;height:110px;border-radius:50%;
-    background:radial-gradient(circle,rgba(124,202,180,.22) 0%,rgba(124,202,180,0) 70%)}
+  .hero{margin:10px 16px 2px;padding:18px 20px 20px 22px;border-radius:22px;position:relative;overflow:hidden;
+    background:linear-gradient(135deg,#eaf7f1 0%,#f6fbf8 70%);border:1px solid #e3f2ea;min-height:170px}
+  .hero .blob{position:absolute;top:-32px;right:-28px;width:130px;height:130px;border-radius:50%;
+    background:radial-gradient(circle,rgba(124,202,180,.32) 0%,rgba(124,202,180,0) 70%)}
+  .hero .art{position:absolute;right:6px;bottom:8px;width:130px;height:90px;opacity:.6;pointer-events:none}
   .hero .brand{font-size:23px;font-weight:700;color:var(--ink);letter-spacing:.3px}
   .hero .lead{font-size:13px;color:var(--muted);margin-top:5px;line-height:1.5}
-  .hero .acts{display:flex;gap:8px;margin-top:15px}
+  .hero .acts{display:flex;gap:8px;margin-top:14px}
   .btn{padding:9px 22px;border-radius:999px;font-size:13px;font-weight:600;cursor:pointer;border:none;font-family:var(--font);text-align:center}
   .btn.solid{background:linear-gradient(135deg,#7ccab4 0%,#56ab92 100%);color:#fff;box-shadow:0 5px 14px rgba(108,191,166,.32)}
   .btn.ghost{background:#fff;color:var(--brand-strong);border:1px solid #dcebe4;box-shadow:var(--shadow-sm)}
 
   .trip{margin:0 16px 9px;background:var(--surface);border-radius:20px;box-shadow:0 5px 16px rgba(108,191,166,.09);
-    padding:14px 16px 12px;cursor:pointer}
-  .trip .trow{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
-  .trip .name{font-size:17px;font-weight:700;line-height:1.35;flex:1;min-width:0}
-  .trip .sub{display:flex;flex-wrap:wrap;align-items:center;margin-top:5px;font-size:13px}
+    padding:15px 16px 14px;display:flex;gap:12px;align-items:flex-start;cursor:pointer}
+  .trip .thumb{width:46px;height:46px;border-radius:13px;background:var(--brand-soft);flex-shrink:0;
+    display:flex;align-items:center;justify-content:center}
+  .trip .thumb.c1{background:#fdeee4}
+  .trip .thumb.c2{background:#e4f1fb}
+  .trip .thumb.c3{background:#fbf4dd}
+  .trip .thumb svg{width:32px;height:32px}
+  .trip .body{flex:1;min-width:0}
+  .trip .head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+  .trip .name{font-size:16px;font-weight:700;line-height:1.35;flex:1;min-width:0}
+  .trip .pill{font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--brand-soft);color:var(--brand-strong);flex-shrink:0;margin-top:2px}
+  .trip .pill.sample{color:#c08a3e;background:#fbf2e6}
+  .trip .pill.gray{color:#777;background:#f0f0f0}
+  .trip .sub{display:flex;flex-wrap:wrap;align-items:center;margin-top:5px;font-size:12.5px;line-height:1.5}
   .trip .place{color:var(--brand-strong);font-weight:500}
   .trip .date{color:var(--muted)}
   .trip .sep{margin:0 6px;color:#c5cdc9}
-  .trip .count{margin-top:10px;padding:7px 10px;border-radius:8px;background:#f3faf7;font-size:12px;font-weight:600;color:var(--brand-strong)}
-  .trip .meta{display:flex;gap:6px;align-items:center;font-size:11.5px;color:var(--muted);margin-top:11px;padding-top:10px;border-top:1px solid #eef4f1;flex-wrap:wrap}
+  .trip .count{margin-top:9px;padding:7px 10px;border-radius:9px;background:#f3faf7;font-size:12px;font-weight:600;color:var(--brand-strong)}
+  .trip .meta{display:flex;gap:6px;align-items:center;font-size:11.5px;color:var(--muted);margin-top:10px;padding-top:10px;border-top:1px solid #eef4f1;flex-wrap:wrap}
   .trip .meta .d{width:3px;height:3px;border-radius:50%;background:#c5cdc9}
 
   /* ---------- DETAIL ---------- */
@@ -189,6 +200,12 @@
       <div data-view="home">
         <div class="hero">
           <div class="blob"></div>
+          <svg class="art" viewBox="0 0 240 160" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="180" cy="46" r="22" stroke="#56ab92" stroke-width="2" opacity="0.55"/>
+            <path d="M20 130 L80 60 L130 100 L180 50 L230 130 Z" stroke="#4f9f8a" stroke-width="2" stroke-linejoin="round" fill="none" opacity="0.6"/>
+            <path d="M20 130 L60 90 L110 120 L160 80 L220 130" stroke="#7ccab4" stroke-width="2" stroke-linejoin="round" fill="none" opacity="0.7"/>
+            <line x1="10" y1="130" x2="230" y2="130" stroke="#9bd3b6" stroke-width="1.5" opacity="0.6"/>
+          </svg>
           <div class="brand">旅途计划</div>
           <div class="lead">下一趟，从这里出发</div>
           <div class="acts">
@@ -200,17 +217,33 @@
         <div class="sec-title">进行中</div>
 
         <div class="trip" onclick="goDetail()">
-          <div class="trow"><div class="name">川西小环线</div><span class="pill brand">示例</span></div>
-          <div class="sub"><span class="place">四姑娘山 · 丹巴 · 新都桥</span><span class="sep">·</span><span class="date">8月24日 – 8月28日</span></div>
-          <div class="count">还有 2 天出发 · 已排 12 个点</div>
-          <div class="meta">4 人同行 <span class="d"></span> 5 天 <span class="d"></span> 你是团长</div>
+          <div class="thumb c0"><svg viewBox="0 0 80 80" fill="none"><circle cx="58" cy="22" r="7" stroke="#56ab92" stroke-width="3"/><path d="M10 60 L30 28 L44 46 L58 30 L72 60 Z" stroke="#4f9f8a" stroke-width="3" stroke-linejoin="round"/><path d="M22 40 L30 28 L38 40" stroke="#7ccab4" stroke-width="2.5" stroke-linejoin="round"/><line x1="6" y1="62" x2="74" y2="62" stroke="#9bd3b6" stroke-width="2.5" stroke-linecap="round"/></svg></div>
+          <div class="body">
+            <div class="head"><div class="name">川西小环线</div><span class="pill sample">示例</span></div>
+            <div class="sub"><span class="place">四姑娘山 · 丹巴 · 新都桥</span><span class="sep">·</span><span class="date">8月24日 – 8月28日</span></div>
+            <div class="count">还有 2 天出发 · 已排 12 个点</div>
+            <div class="meta">4 人同行 <span class="d"></span> 5 天 <span class="d"></span> 你是团长</div>
+          </div>
         </div>
 
         <div class="trip" onclick="goDetail()">
-          <div class="trow"><div class="name">大理慢生活</div><span class="pill gray">已归档</span></div>
-          <div class="sub"><span class="place">洱海 · 喜洲 · 双廊</span><span class="sep">·</span><span class="date">7月10日 – 7月14日</span></div>
-          <div class="count">可查看智能分账</div>
-          <div class="meta">2 人同行 <span class="d"></span> 5 天 <span class="d"></span> 你是成员</div>
+          <div class="thumb c1"><svg viewBox="0 0 80 80" fill="none"><path d="M10 38 L28 20 L42 34 L56 22 L70 38" stroke="#4f9f8a" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><line x1="8" y1="42" x2="72" y2="42" stroke="#9bd3b6" stroke-width="2.5" stroke-linecap="round"/><path d="M10 50 Q22 46 34 50 T58 50 T70 50" stroke="#7ccab4" stroke-width="2.5" stroke-linecap="round"/><path d="M10 58 Q22 54 34 58 T58 58 T70 58" stroke="#56ab92" stroke-width="2.5" stroke-linecap="round"/></svg></div>
+          <div class="body">
+            <div class="head"><div class="name">大理慢生活</div><span class="pill gray">已归档</span></div>
+            <div class="sub"><span class="place">洱海 · 喜洲 · 双廊</span><span class="sep">·</span><span class="date">7月10日 – 7月14日</span></div>
+            <div class="count">可查看智能分账</div>
+            <div class="meta">2 人同行 <span class="d"></span> 5 天 <span class="d"></span> 你是成员</div>
+          </div>
+        </div>
+
+        <div class="trip" onclick="goDetail()">
+          <div class="thumb c3"><svg viewBox="0 0 80 80" fill="none"><path d="M16 26 Q40 16 64 26" stroke="#4f9f8a" stroke-width="3" stroke-linecap="round"/><line x1="22" y1="26" x2="22" y2="60" stroke="#56ab92" stroke-width="3" stroke-linecap="round"/><line x1="58" y1="26" x2="58" y2="60" stroke="#56ab92" stroke-width="3" stroke-linecap="round"/><line x1="14" y1="36" x2="66" y2="36" stroke="#7ccab4" stroke-width="3" stroke-linecap="round"/><line x1="8" y1="62" x2="72" y2="62" stroke="#9bd3b6" stroke-width="2.5" stroke-linecap="round"/></svg></div>
+          <div class="body">
+            <div class="head"><div class="name">京都赏樱</div><span class="pill">规划中</span></div>
+            <div class="sub"><span class="place">京都 · 奈良 · 岚山</span><span class="sep">·</span><span class="date">4月3日 – 4月8日</span></div>
+            <div class="count">3 位同伴已加入</div>
+            <div class="meta">2 人同行 <span class="d"></span> 6 天 <span class="d"></span> 你是团长</div>
+          </div>
         </div>
       </div>
 

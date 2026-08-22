@@ -1,4 +1,5 @@
 const { api } = require('../../utils/api')
+const { coverOptions, ROUTE_KEY } = require('../../utils/illust')
 
 Page({
   data: {
@@ -7,6 +8,8 @@ Page({
     start_date: '',
     end_date: '',
     remark: '',
+    cover: ROUTE_KEY,
+    covers: coverOptions(),
     ready: false,
   },
   syncReady() {
@@ -24,6 +27,10 @@ Page({
   },
   onRemark(e) {
     this.setData({ remark: e.detail.value })
+  },
+  onCover(e) {
+    const cover = (e.currentTarget.dataset && e.currentTarget.dataset.key) || ROUTE_KEY
+    this.setData({ cover })
   },
   onStart(e) {
     const start_date = e.detail.value
@@ -54,6 +61,7 @@ Page({
         start_date,
         end_date,
         remark: (remark || '').trim() || undefined,
+        cover: this.data.cover || ROUTE_KEY,
       })
       getApp().markTripsDirty()
       wx.hideLoading()

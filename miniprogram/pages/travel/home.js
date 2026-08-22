@@ -1114,8 +1114,8 @@ Page({
       actions.push('plan')
     }
     if (trip.role === 1) {
-      items.push('修改日期')
-      actions.push('dates')
+      items.push('修改旅途')
+      actions.push('edit')
     }
     if (this.data.isCreator) {
       items.push('归档行程')
@@ -1128,7 +1128,7 @@ Page({
         const action = actions[r.tapIndex]
         setTimeout(() => {
           if (action === 'plan') this.enterEdit()
-          else if (action === 'dates') this.goEditTravel()
+          else if (action === 'edit') this.goEditTravel()
           else if (action === 'archive') this.archive()
         }, 50)
       },

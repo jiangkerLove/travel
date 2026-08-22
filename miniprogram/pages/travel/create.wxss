@@ -34,7 +34,7 @@ page {
   background: #fff;
   border-radius: 28rpx;
   padding: 8rpx 28rpx 12rpx;
-  box-shadow: 0 10rpx 28rpx rgba(80, 110, 96, 0.04);
+  box-shadow: 0 10rpx 28rpx rgba(108, 191, 166, 0.07);
 }
 
 .field {
@@ -44,6 +44,45 @@ page {
 
 .field.last {
   border-bottom: none;
+}
+
+.cover-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx 12rpx;
+  padding-top: 4rpx;
+}
+
+.cover-item {
+  width: 112rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.cover-img {
+  width: 88rpx;
+  height: 88rpx;
+  padding: 8rpx;
+  box-sizing: border-box;
+  border-radius: 20rpx;
+  background: #f3faf7;
+  border: 2rpx solid transparent;
+}
+
+.cover-item.on .cover-img {
+  border-color: #56ab92;
+  background: #e9f6f0;
+}
+
+.cover-name {
+  font-size: 20rpx;
+  color: #8fa19a;
+}
+
+.cover-item.on .cover-name {
+  color: #4f9f8a;
 }
 
 .field-row {
@@ -127,7 +166,7 @@ page {
   background: #6cbfa6;
   color: #fff;
   border-color: #6cbfa6;
-  box-shadow: 0 12rpx 28rpx rgba(111, 155, 136, 0.28);
+  box-shadow: 0 12rpx 28rpx rgba(108, 191, 166, 0.32);
 }
 
 .soft-btn.disabled {

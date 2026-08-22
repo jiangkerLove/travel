@@ -34,6 +34,7 @@ pub struct TravelRow {
     pub creator_id: i64,
     pub is_lock: bool,
     pub remark: Option<String>,
+    pub cover: String,
 }
 
 #[derive(sqlx::FromRow, Clone)]
@@ -140,7 +141,7 @@ pub async fn find_travel(pool: &PgPool, id: i64) -> Result<TravelRow, AppError> 
     sqlx::query_as::<_, TravelRow>(
         r#"
         SELECT id, travel_name, destination, start_date, end_date, invite_code,
-               status, creator_id, is_lock, remark
+               status, creator_id, is_lock, remark, cover
         FROM travel WHERE id = $1
         "#,
     )

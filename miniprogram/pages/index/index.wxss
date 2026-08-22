@@ -23,10 +23,20 @@ page {
   position: absolute;
   top: -60rpx;
   right: -50rpx;
-  width: 220rpx;
-  height: 220rpx;
+  width: 260rpx;
+  height: 260rpx;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(124, 202, 180, 0.22) 0%, rgba(124, 202, 180, 0) 70%);
+  background: radial-gradient(circle, rgba(124, 202, 180, 0.32) 0%, rgba(124, 202, 180, 0) 70%);
+  pointer-events: none;
+}
+
+.hero-art {
+  position: absolute;
+  right: 12rpx;
+  bottom: 18rpx;
+  width: 240rpx;
+  height: 160rpx;
+  opacity: 0.55;
   pointer-events: none;
 }
 
@@ -102,15 +112,44 @@ page {
 .empty-sub { margin-top: 8rpx; font-size: 24rpx; color: #8fa19a; }
 
 .trip {
+  display: flex;
+  gap: 20rpx;
+  align-items: flex-start;
   background: #fff;
   border-radius: 28rpx;
-  padding: 28rpx 32rpx 24rpx;
+  padding: 28rpx 32rpx 26rpx;
   margin-bottom: 24rpx;
   box-shadow: 0 8rpx 24rpx rgba(108, 191, 166, 0.09);
 }
 
 .trip.tapable:active {
   background: #f4f9f6;
+}
+
+.trip-illust {
+  width: 112rpx;
+  height: 112rpx;
+  border-radius: 24rpx;
+  background: #e9f6f0;
+  flex-shrink: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.trip-illust.c1 { background: #fdeee4; }
+.trip-illust.c2 { background: #e4f1fb; }
+.trip-illust.c3 { background: #fbf4dd; }
+
+.trip-illust-img {
+  width: 112rpx;
+  height: 112rpx;
+}
+
+.trip-body {
+  flex: 1;
+  min-width: 0;
 }
 
 .trip-head {
@@ -187,4 +226,3 @@ page {
 }
 
 .trip-meta .dot { margin: 0 8rpx; }
-

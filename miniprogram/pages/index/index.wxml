@@ -1,6 +1,12 @@
 <view class="home-page">
   <view class="hero">
     <view class="hero-blob"></view>
+    <svg class="hero-art" viewBox="0 0 240 160" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="180" cy="46" r="22" stroke="#56ab92" stroke-width="2" opacity="0.55"/>
+      <path d="M20 130 L80 60 L130 100 L180 50 L230 130 Z" stroke="#4f9f8a" stroke-width="2" stroke-linejoin="round" fill="none" opacity="0.6"/>
+      <path d="M20 130 L60 90 L110 120 L160 80 L220 130" stroke="#7ccab4" stroke-width="2" stroke-linejoin="round" fill="none" opacity="0.7"/>
+      <line x1="10" y1="130" x2="230" y2="130" stroke="#9bd3b6" stroke-width="1.5" opacity="0.6"/>
+    </svg>
     <view class="brand">旅途计划</view>
     <view class="lead">下一趟，从这里出发</view>
     <view class="hero-actions">
@@ -24,25 +30,30 @@
       bind:tap="openTrip"
       data-id="{{item.id}}"
     >
-      <view class="trip-head">
-        <view class="trip-title">{{item.travel_name}}</view>
-        <view class="pill-row">
-          <view class="soft-pill sample" wx:if="{{item.is_sample}}">示例</view>
-          <view class="soft-pill">{{item.status_text}}</view>
+      <view class="trip-illust c{{index % 4}}">
+        <image class="trip-illust-img" src="{{item.thumb}}" mode="aspectFit"></image>
+      </view>
+      <view class="trip-body">
+        <view class="trip-head">
+          <view class="trip-title">{{item.travel_name}}</view>
+          <view class="pill-row">
+            <view class="soft-pill sample" wx:if="{{item.is_sample}}">示例</view>
+            <view class="soft-pill">{{item.status_text}}</view>
+          </view>
         </view>
-      </view>
-      <view class="trip-sub">
-        <text class="trip-place" wx:if="{{item.destination}}">{{item.destination}}</text>
-        <text class="sep" wx:if="{{item.destination && item.rangeText}}">·</text>
-        <text class="trip-date">{{item.rangeText}}</text>
-      </view>
-      <view class="trip-count" wx:if="{{item.countdown}}">{{item.countdown}}</view>
-      <view class="trip-meta">
-        <text>{{item.member_count}} 人同行</text>
-        <text class="dot">·</text>
-        <text>{{item.day_count}} 天</text>
-        <text class="dot">·</text>
-        <text>{{item.role === 1 ? '你是团长' : '你是成员'}}</text>
+        <view class="trip-sub">
+          <text class="trip-place" wx:if="{{item.destination}}">{{item.destination}}</text>
+          <text class="sep" wx:if="{{item.destination && item.rangeText}}">·</text>
+          <text class="trip-date">{{item.rangeText}}</text>
+        </view>
+        <view class="trip-count" wx:if="{{item.countdown}}">{{item.countdown}}</view>
+        <view class="trip-meta">
+          <text>{{item.member_count}} 人同行</text>
+          <text class="dot">·</text>
+          <text>{{item.day_count}} 天</text>
+          <text class="dot">·</text>
+          <text>{{item.role === 1 ? '你是团长' : '你是成员'}}</text>
+        </view>
       </view>
     </view>
   </view>

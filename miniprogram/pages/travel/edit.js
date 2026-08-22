@@ -1,4 +1,5 @@
 const { api } = require('../../utils/api')
+const { coverOptions, ROUTE_KEY } = require('../../utils/illust')
 
 function dayCount(start, end) {
   if (!start || !end || end < start) return 0
@@ -30,6 +31,8 @@ Page({
     start_date: '',
     end_date: '',
     remark: '',
+    cover: ROUTE_KEY,
+    covers: coverOptions(),
     originEnd: '',
     ready: false,
     dayCount: 0,
@@ -51,6 +54,7 @@ Page({
         start_date: trip.start_date || '',
         end_date: trip.end_date || '',
         remark: trip.remark || '',
+        cover: trip.cover || ROUTE_KEY,
         originEnd: trip.end_date || '',
         originDays: trip.day_count || 0,
       }
@@ -81,9 +85,13 @@ Page({
   onRemark(e) {
     this.setData({ remark: e.detail.value })
   },
+  onCover(e) {
+    const cover = (e.currentTarget.dataset && e.currentTarget.dataset.key) || ROUTE_KEY
+    this.setData({ cover })
+  },
   async submit() {
     if (!this.data.ready || this.data.busy) return
-    const { id, travel_name, destination, start_date, end_date, remark, dayCount, originDays } = this.data
+    const { id, travel_name, destination, start_date, end_date, remark, cover, dayCount, originDays } = this.data
     const doSave = async () => {
       this.setData({ busy: true })
       wx.showLoading({ title: '保存中' })
@@ -95,6 +103,7 @@ Page({
           start_date,
           end_date,
           remark: (remark || '').trim(),
+          cover: cover || ROUTE_KEY,
         })
         getApp().markTripsDirty && getApp().markTripsDirty()
         wx.showToast({ title: '已保存', icon: 'success' })

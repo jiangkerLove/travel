@@ -1,4 +1,5 @@
 const { api } = require('../../utils/api')
+const { cardThumb } = require('../../utils/illust')
 
 function prettyDate(s) {
   if (!s) return ''
@@ -8,14 +9,17 @@ function prettyDate(s) {
 }
 
 function decorate(list) {
-  return (list || []).map((t) => ({
-    ...t,
-    rangeText: `${prettyDate(t.start_date)} – ${prettyDate(t.end_date)}`,
-    countdown: t.countdown || '',
-    // 以后端为准（示例/归档已强制只读）
-    can_edit: !!t.can_edit,
-    can_bill: !!t.can_bill,
-  }))
+  return (list || []).map((t) => {
+    const { route_svg: _svg, routeSvg: _svg2, ...rest } = t
+    return {
+      ...rest,
+      rangeText: `${prettyDate(t.start_date)} – ${prettyDate(t.end_date)}`,
+      countdown: t.countdown || '',
+      thumb: cardThumb(t),
+      can_edit: !!t.can_edit,
+      can_bill: !!t.can_bill,
+    }
+  })
 }
 
 Page({

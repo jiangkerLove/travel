@@ -44,7 +44,7 @@ page {
   background: #fff;
   border-radius: 28rpx;
   padding: 40rpx 32rpx 36rpx;
-  box-shadow: 0 12rpx 32rpx rgba(80, 110, 96, 0.06);
+  box-shadow: 0 12rpx 32rpx rgba(108, 191, 166, 0.10);
 }
 
 .avatar-btn {
@@ -99,7 +99,7 @@ page {
   font-weight: 650;
   color: #fff;
   background: #6cbfa6;
-  box-shadow: 0 12rpx 28rpx rgba(111, 155, 136, 0.28);
+  box-shadow: 0 12rpx 28rpx rgba(108, 191, 166, 0.32);
 }
 
 .enter.disabled {

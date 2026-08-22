@@ -12,7 +12,7 @@ page {
   background: #fff;
   border-radius: 24rpx;
   overflow: hidden;
-  box-shadow: 0 8rpx 24rpx rgba(80, 110, 96, 0.04);
+  box-shadow: 0 8rpx 24rpx rgba(108, 191, 166, 0.07);
 }
 
 .cell {
@@ -122,7 +122,7 @@ page {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 12rpx 28rpx rgba(111, 155, 136, 0.28);
+  box-shadow: 0 12rpx 28rpx rgba(108, 191, 166, 0.32);
 }
 
 .save.disabled {

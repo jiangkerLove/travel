@@ -41,7 +41,7 @@ page {
   border-radius: 24rpx;
   padding: 26rpx 28rpx;
   margin-bottom: 12rpx;
-  box-shadow: 0 8rpx 24rpx rgba(80, 110, 96, 0.04);
+  box-shadow: 0 8rpx 24rpx rgba(108, 191, 166, 0.07);
 }
 
 .card.nested {

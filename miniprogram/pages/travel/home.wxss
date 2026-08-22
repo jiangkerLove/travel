@@ -316,7 +316,7 @@ page {
   border-radius: 20rpx;
   padding: 20rpx 12rpx 20rpx 24rpx;
   margin-bottom: 12rpx;
-  box-shadow: 0 8rpx 20rpx rgba(80, 110, 96, 0.04);
+  box-shadow: 0 8rpx 20rpx rgba(108, 191, 166, 0.07);
 }
 
 .plan-row.is-start {
@@ -410,7 +410,7 @@ page {
   border-radius: 20rpx;
   padding: 22rpx 24rpx;
   margin-bottom: 12rpx;
-  box-shadow: 0 8rpx 20rpx rgba(80, 110, 96, 0.04);
+  box-shadow: 0 8rpx 20rpx rgba(108, 191, 166, 0.07);
 }
 
 .place-name {
@@ -472,7 +472,7 @@ page {
   padding: 22rpx 24rpx;
   background: #fff;
   border-radius: 20rpx;
-  box-shadow: 0 8rpx 20rpx rgba(80, 110, 96, 0.04);
+  box-shadow: 0 8rpx 20rpx rgba(108, 191, 166, 0.07);
 }
 
 .settle-tip {
@@ -575,7 +575,7 @@ page {
   border-radius: 24rpx;
   padding: 24rpx 28rpx;
   margin-bottom: 20rpx;
-  box-shadow: 0 8rpx 20rpx rgba(80, 110, 96, 0.04);
+  box-shadow: 0 8rpx 20rpx rgba(108, 191, 166, 0.07);
 }
 
 .invite-left { flex: 1; min-width: 0; }
@@ -616,7 +616,7 @@ page {
   border-radius: 22rpx;
   padding: 18rpx 20rpx 16rpx;
   margin-bottom: 12rpx;
-  box-shadow: 0 6rpx 16rpx rgba(80, 110, 96, 0.04);
+  box-shadow: 0 6rpx 16rpx rgba(108, 191, 166, 0.07);
 }
 
 .group-head {
@@ -676,7 +676,7 @@ page {
 
 .m-chip.leader {
   background: rgba(111, 155, 136, 0.14);
-  border-color: rgba(111, 155, 136, 0.28);
+  border-color: rgba(108, 191, 166, 0.32);
 }
 
 .m-chip.guest {
@@ -731,7 +731,7 @@ page {
   background: #fff;
   border-radius: 24rpx;
   padding: 8rpx 28rpx;
-  box-shadow: 0 8rpx 20rpx rgba(80, 110, 96, 0.04);
+  box-shadow: 0 8rpx 20rpx rgba(108, 191, 166, 0.07);
 }
 
 .mgmt-title {
@@ -789,7 +789,7 @@ page {
   gap: 12rpx;
   padding: 12rpx 24rpx calc(12rpx + env(safe-area-inset-bottom));
   background: rgba(243, 246, 243, 0.98);
-  box-shadow: 0 -6rpx 18rpx rgba(80, 110, 96, 0.06);
+  box-shadow: 0 -6rpx 18rpx rgba(108, 191, 166, 0.10);
 }
 
 .edit-bar-btn {
