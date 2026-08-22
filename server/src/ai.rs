@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 
 use crate::{
     error::AppError,
-    poi::{search_places, PoiVo},
+    poi::{geocode_address, looks_like_admin_place, pick_best_poi, search_places, PoiVo},
     util::valid_point_type,
 };
 
@@ -177,7 +177,7 @@ fn finish_day_end(p: &mut AiPoint, is_trip_last_day: bool) {
 const SYSTEM_ROLE: &str = "你是资深自驾游与自由行行程规划师，熟悉中国路况与景区分布。只输出 JSON，不要 markdown，不要解释。";
 
 const OUTPUT_FORMAT: &str = "\
-【输出格式】place_name 用高德能搜到的常用地名；query 写成「城市 景点或区县」辅助定位；point_type 仅 sight/hotel/food/gas/transport；每天 3-6 个点（含过夜点）；arrive 用 HH:MM，随路程先后递增；stay_minutes 合理估算游览时长；note 只写一句必要提醒（门票/预约/路况/最佳时段），不写酒店名；summary 用一两句话说明整趟或当天怎么走；theme 写当天一句话主题。";
+【输出格式】place_name 必须是具体景区、地标、镇村名，不要只写地级市/省会名（错误：松原市当景点；正确：查干湖、乾安泥林；过夜写前郭县、日隆镇等）。query 写成「城市 具体地点」（如「松原 查干湖」），不要只写城市名，避免定位偏到机场。不要输出 longitude/latitude，坐标由系统查询。point_type 仅 sight/hotel/food/gas/transport；每天 3-6 个点（含过夜点）；arrive 用 HH:MM，随路程先后递增；stay_minutes 合理估算游览时长；note 只写一句必要提醒；summary 用一两句话说明整趟或当天怎么走；theme 写当天一句话主题。";
 
 const PLANNING_METHOD: &str = "\
 【规划步骤】先按天划定活动范围并确定当晚住宿镇/县 → 再选当天顺路可达的景区 → 按动线从早到晚排点 → 自检是否折返或重复地名 → 最后填 arrive 与 stay_minutes。全程住宿地尽量少换，整体路线向前推进。";
@@ -432,8 +432,21 @@ async fn chat_json(api_key: &str, user_content: String) -> Result<ModelOut, AppE
     parse_model_json(&content)
 }
 
-async fn geocode_point(key: &str, secret: &str, city: &str, p: &mut AiPoint) {
+async fn geocode_point(
+    key: &str,
+    secret: &str,
+    city: &str,
+    p: &mut AiPoint,
+    cache: &mut std::collections::HashMap<String, (f64, f64)>,
+) {
     if key.is_empty() {
+        return;
+    }
+    let name_key = p.place_name.trim().to_string();
+    if let Some((lng, lat)) = cache.get(&name_key) {
+        p.longitude = Some(*lng);
+        p.latitude = Some(*lat);
+        p.found = true;
         return;
     }
     let q = if p.query.trim().is_empty() {
@@ -442,37 +455,45 @@ async fn geocode_point(key: &str, secret: &str, city: &str, p: &mut AiPoint) {
         p.query.trim().to_string()
     };
     if try_geocode(key, secret, city, p, &q).await {
+        if let (Some(lng), Some(lat)) = (p.longitude, p.latitude) {
+            cache.insert(name_key, (lng, lat));
+        }
         return;
     }
     let name = p.place_name.clone();
-    if q != name {
-        try_geocode(key, secret, city, p, &name).await;
+    if q != name && try_geocode(key, secret, city, p, &name).await {
+        if let (Some(lng), Some(lat)) = (p.longitude, p.latitude) {
+            cache.insert(name_key, (lng, lat));
+        }
     }
 }
 
 async fn try_geocode(key: &str, secret: &str, city: &str, p: &mut AiPoint, q: &str) -> bool {
-    let Ok(list) = search_places(key, secret, q, None, None, Some(city)).await else {
+    let city_opt = city.trim();
+    let city_opt = if city_opt.is_empty() { None } else { Some(city_opt) };
+    if looks_like_admin_place(&p.place_name) || looks_like_admin_place(q) {
+        if let Some(hit) = geocode_address(key, secret, q, city_opt).await {
+            apply_poi(p, &hit);
+            return true;
+        }
+    }
+    let Ok(list) = search_places(key, secret, q, None, None, city_opt).await else {
         return false;
     };
-    let Some(hit) = pick_poi(&list, &p.place_name) else {
+    let Some(hit) = pick_best_poi(&list, &p.place_name, q) else {
         return false;
     };
+    apply_poi(p, hit);
+    true
+}
+
+fn apply_poi(p: &mut AiPoint, hit: &PoiVo) {
     p.longitude = Some(hit.longitude);
     p.latitude = Some(hit.latitude);
     if p.place_name.chars().count() < 2 {
         p.place_name = hit.name.clone();
     }
     p.found = true;
-    true
-}
-
-fn pick_poi<'a>(list: &'a [PoiVo], name: &str) -> Option<&'a PoiVo> {
-    if list.is_empty() {
-        return None;
-    }
-    list.iter()
-        .find(|p| p.name.contains(name) || name.contains(&p.name))
-        .or_else(|| list.first())
 }
 
 pub async fn draft_itinerary(
@@ -601,9 +622,10 @@ pub async fn draft_itinerary(
     if draft.days.is_empty() {
         return Err(AppError::BadRequest("没能排出地点，换种说法再试".into()));
     }
+    let mut geo_cache: std::collections::HashMap<String, (f64, f64)> = std::collections::HashMap::new();
     for day in &mut draft.days {
         for p in &mut day.points {
-            geocode_point(amap_key, amap_secret, destination, p).await;
+            geocode_point(amap_key, amap_secret, destination, p, &mut geo_cache).await;
         }
         dedupe_adjacent_after_geocode(&mut day.points);
     }

@@ -348,3 +348,124 @@ pub async fn reverse_geocode(
         latitude: lat,
     })
 }
+
+fn is_transport_hub(name: &str) -> bool {
+    [
+        "机场", "航站楼", "火车站", "高铁站", "动车站", "汽车站", "客运站", "停车楼",
+    ]
+    .iter()
+    .any(|k| name.contains(k))
+}
+
+/// 市/县/区级地名，优先走地理编码而非 POI 搜索
+pub fn looks_like_admin_place(name: &str) -> bool {
+    let n = name.trim();
+    if n.is_empty() || is_transport_hub(n) {
+        return false;
+    }
+    let ends_admin = n.ends_with('市')
+        || n.ends_with('县')
+        || n.ends_with('区')
+        || n.ends_with("自治县")
+        || n.ends_with("自治州");
+    ends_admin && n.chars().count() <= 12
+}
+
+fn score_poi(p: &PoiVo, target: &str, query: &str, want_transport: bool) -> i32 {
+    let mut s = 0i32;
+    let pn = p.name.trim();
+    let target = target.trim();
+    if pn == target {
+        s += 200;
+    } else if pn.contains(target) || target.contains(pn) {
+        s += 80;
+    }
+    if !query.is_empty() && (pn.contains(query) || p.address.contains(query)) {
+        s += 40;
+    }
+    if is_transport_hub(pn) {
+        if want_transport {
+            s += 60;
+        } else {
+            s -= 150;
+        }
+    }
+    if target.ends_with('市') || target.ends_with('县') || target.ends_with('区') {
+        if pn == target {
+            s += 50;
+        }
+        if pn.contains("人民政府") || pn.contains("县政府") || pn.contains("市政府") {
+            s += 45;
+        }
+    }
+    if pn.chars().count() > target.chars().count() + 8 {
+        s -= 25;
+    }
+    s
+}
+
+/// 从搜索结果里挑最匹配的一项，避免地级市名误落到机场
+pub fn pick_best_poi<'a>(list: &'a [PoiVo], target: &str, query: &str) -> Option<&'a PoiVo> {
+    if list.is_empty() {
+        return None;
+    }
+    let want_transport = is_transport_hub(target) || is_transport_hub(query);
+    list.iter()
+        .max_by_key(|p| score_poi(p, target, query, want_transport))
+}
+
+/// 地址地理编码（市/县等行政区更适合走此接口）
+pub async fn geocode_address(
+    key: &str,
+    secret: &str,
+    address: &str,
+    city: Option<&str>,
+) -> Option<PoiVo> {
+    let kw = address.trim();
+    if kw.chars().count() < 2 || key.is_empty() {
+        return None;
+    }
+    let mut params: Vec<(&str, &str)> = vec![("address", kw)];
+    if let Some(c) = city.map(str::trim).filter(|s| !s.is_empty()) {
+        params.push(("city", c));
+    }
+    let list = pois_from_search(
+        amap_get(key, secret, "/v3/geocode/geo", &params)
+            .await
+            .unwrap_or(AmapSearch {
+                status: None,
+                info: None,
+                pois: None,
+                tips: None,
+                geocodes: None,
+            }),
+    );
+    pick_best_poi(&list, kw, kw)
+        .or(list.first())
+        .cloned()
+}
+
+#[cfg(test)]
+mod pick_tests {
+    use super::*;
+
+    #[test]
+    fn deprioritize_airport_for_city() {
+        let list = vec![
+            PoiVo {
+                name: "松原查干湖机场".into(),
+                address: String::new(),
+                longitude: 124.0,
+                latitude: 45.0,
+            },
+            PoiVo {
+                name: "松原市".into(),
+                address: "吉林省松原市".into(),
+                longitude: 124.82,
+                latitude: 45.14,
+            },
+        ];
+        let hit = pick_best_poi(&list, "松原市", "松原市").unwrap();
+        assert_eq!(hit.name, "松原市");
+    }
+}
