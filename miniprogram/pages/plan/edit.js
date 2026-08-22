@@ -330,19 +330,4 @@ Page({
       wx.hideLoading()
     }
   },
-  async remove() {
-    const id = this.data.id
-    if (!id) return
-    const ok = await new Promise((resolve) => {
-      wx.showModal({ title: '删除', content: '确定删除这个地点？', success: (r) => resolve(r.confirm) })
-    })
-    if (!ok) return
-    wx.showLoading({ title: '删除中' })
-    try {
-      await api.planDel(id)
-      wx.navigateBack()
-    } finally {
-      wx.hideLoading()
-    }
-  },
 })

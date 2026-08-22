@@ -1048,11 +1048,11 @@ page {
 }
 
 .day-pick-sheet {
-  max-height: 72vh;
+  max-height: 78vh;
 }
 
 .day-pick-list {
-  max-height: calc(72vh - 120rpx);
+  height: 62vh;
   padding: 0 12rpx 24rpx;
   box-sizing: border-box;
 }

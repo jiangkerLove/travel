@@ -82,6 +82,20 @@ function decoratePlans(plans, startHint, showRoute) {
   })
 }
 
+function geoPoints(points) {
+  return (points || []).filter((p) => p.latitude && p.longitude)
+}
+
+function navLines(lines) {
+  return (lines || []).filter((l) => l.from_nav && (l.points || []).length >= 2)
+}
+
+function legsComplete(lines, points) {
+  const pts = geoPoints(points)
+  if (pts.length < 2) return true
+  return navLines(lines).length >= pts.length - 1
+}
+
 function buildMemberGroups(members) {
   const namedOrder = []
   const namedMap = new Map()
@@ -173,6 +187,7 @@ Page({
     this._mapInited = false
     this._mapSeq = 0
     this._dayScopeInited = false
+    this._openEdit = q.openEdit === '1' || q.openEdit === 'true'
     // 进页立刻定标题，避免先闪全局「旅途计划」
     wx.setNavigationBarTitle({
       title: mode === 'edit' ? '排行程' : (name || '旅途'),
@@ -199,12 +214,18 @@ Page({
   },
   onShow() {
     if (!this.data.id) return
+    if (this._plansStale) {
+      this._plansStale = false
+      this._plansLoaded = false
+      this._mapCache = null
+      this._mapDrawKey = ''
+    }
     if (this.data.mode === 'edit' && this._dirtyAfterEdit) {
       this._dirtyAfterEdit = false
-      this.setData({ routesReady: false })
       this._mapCache = null
       this._plansLoaded = false
       this._mapDrawKey = ''
+      this.invalidateDayRoutes()
     }
     // 从记账页返回：立刻刷新账单
     if (this._billsDirty) {
@@ -212,11 +233,120 @@ Page({
       if (this.data.tab === 'bill') this.loadBills()
       else this._billsStale = true
     }
-    // 已加载过就不要整页重刷，否则地图/列表会一直闪
-    if (this._plansLoaded && this.data.days && this.data.days.length) {
-      return
+    const boot = async () => {
+      if (this._needFullRoutes) {
+        this._needFullRoutes = false
+        await this.refresh()
+        await this.ensureDetailRoutes()
+        return
+      }
+      if (!(this._plansLoaded && this.data.days && this.data.days.length)) {
+        await this.refresh()
+      }
+      if (this._openEdit && this.data.mode === 'browse') {
+        this._openEdit = false
+        this.enterEdit()
+      }
     }
-    this.refresh()
+    boot()
+  },
+  onUnload() {
+    if (this.data.mode !== 'edit') return
+    const pages = getCurrentPages()
+    const prev = pages[pages.length - 2]
+    if (prev) {
+      if (typeof prev.markPlansStale === 'function') prev.markPlansStale()
+      prev._needFullRoutes = true
+    }
+  },
+  markPlansStale() {
+    this._plansStale = true
+  },
+  scopeHasCachedRoutes() {
+    const cache = this._dayRoutes || {}
+    const scope = this.data.mapScope
+    if (scope === 'all') {
+      return (this.data.days || []).some((d) => (d.plans || []).length && cache[d.day_num])
+    }
+    const day = this.data.currentDay
+    return !!(day && cache[day.day_num])
+  },
+  mergeEditRoutesForScope(scope, day, days) {
+    const cache = this._dayRoutes || {}
+    const acc = { points: [], lines: [], seenPt: new Set(), seenLine: new Set() }
+    const list = scope === 'all' ? (days || []) : [day].filter(Boolean)
+    list.forEach((d) => {
+      const hit = cache[d.day_num]
+      if (!hit) return
+      ;(hit.points || []).forEach((p) => {
+        if (!p.id || acc.seenPt.has(p.id)) return
+        acc.seenPt.add(p.id)
+        acc.points.push(p)
+      })
+      ;(hit.lines || []).forEach((l) => {
+        const k = `${l.from_id}-${l.to_id}`
+        if (acc.seenLine.has(k)) return
+        acc.seenLine.add(k)
+        acc.lines.push(l)
+      })
+    })
+    return acc
+  },
+  invalidateDayRoutes(...dayNums) {
+    if (!this._dayRoutes) this._dayRoutes = {}
+    const nums = dayNums.length ? dayNums : (this.data.days || []).map((d) => d.day_num)
+    nums.forEach((n) => {
+      delete this._dayRoutes[n]
+      delete this._dayRoutes[n + 1]
+    })
+    this._mapCache = null
+    this._mapDrawKey = ''
+    if (this.data.mode === 'edit') {
+      this.setData({ routesReady: this.scopeHasCachedRoutes() })
+    }
+  },
+  async loadEditRouteCaches() {
+    if (this.data.mode !== 'edit') return
+    this._dayRoutes = {}
+    const days = this.data.days || []
+    for (const day of days) {
+      if (!(day.plans || []).length) continue
+      try {
+        const data = await api.mapDay(this.data.id, day.day_num, false, true)
+        const points = decoratePlans(data.points || [], '', false)
+        if (!legsComplete(data.lines, points)) continue
+        this._dayRoutes[day.day_num] = {
+          points,
+          lines: navLines(data.lines),
+        }
+      } catch (e) { /* ignore */ }
+    }
+    this.setData({ routesReady: this.scopeHasCachedRoutes() })
+  },
+  async ensureDetailRoutes() {
+    if (this.data.mode !== 'browse') return
+    try {
+      let data = await api.mapGlobal(this.data.id, false)
+      let points = decoratePlans(data.points || [], '', true)
+      if (!legsComplete(data.lines, points)) {
+        wx.showLoading({ title: '生成路线中', mask: true })
+        try {
+          for (const day of this.data.days || []) {
+            if ((day.plans || []).length) {
+              await api.mapDay(this.data.id, day.day_num, false, false)
+            }
+          }
+          data = await api.mapGlobal(this.data.id, false)
+          points = decoratePlans(data.points || [], '', true)
+        } finally {
+          wx.hideLoading()
+        }
+      }
+      await this.loadPlans()
+      await this.renderMap({ fit: !this._mapFitted })
+    } catch (e) {
+      await this.renderMap({ fit: false })
+    }
   },
   setTab(e) {
     const tab = e.currentTarget.dataset.v
@@ -243,14 +373,12 @@ Page({
       wx.showToast({ title: '没有改行程权限', icon: 'none' })
       return
     }
-    wx.setNavigationBarTitle({ title: '排行程' })
-    this.setData({ mode: 'edit', tab: 'plan' })
-    if (this.data.mapScope === 'all') {
-      const dayIndex = Math.max(this.data.dayIndex, 0)
-      const day = this.data.days[dayIndex] || { plans: [] }
-      this.setData({ mapScope: 'day', dayIndex, currentDay: day })
-      this.renderMap({ fit: true })
-    }
+    if (this.data.mode === 'edit') return
+    const name = encodeURIComponent((this.data.trip && this.data.trip.travel_name) || '')
+    const dest = encodeURIComponent((this.data.trip && this.data.trip.destination) || '')
+    wx.navigateTo({
+      url: `/pages/travel/home?id=${this.data.id}&mode=edit&name=${name}&dest=${dest}`,
+    })
   },
   async refresh() {
     const id = this.data.id
@@ -277,7 +405,14 @@ Page({
       canBill,
       isCreator: Number(trip.creator_id) === Number(user.id),
     })
-    if (this.data.tab === 'plan' || this.data.mode === 'edit') await this.loadPlans()
+    if (this.data.tab === 'plan' || this.data.mode === 'edit') {
+      if (this.data.mode === 'edit') {
+        await this.loadPlans({ withRoutes: false })
+        await this.loadEditRouteCaches()
+      } else {
+        await this.loadPlans()
+      }
+    }
     if (this.data.tab === 'bill') await this.loadBills()
     if (this.data.tab === 'member') await this.loadMembers()
   },
@@ -345,14 +480,16 @@ Page({
       mapScope: scope,
       dayIndex: scope === 'all' ? -1 : dayIndex,
       currentDay: days[scope === 'all' ? Math.max(dayIndex, 0) : dayIndex] || { plans: [] },
-      routesReady: showRoute,
+      routesReady: editing ? this.scopeHasCachedRoutes() : showRoute,
     })
     this._plansLoaded = true
     if (!skipMap) await this.renderMap({ fit: plansChanged || !this._mapFitted })
   },
   switchAll() {
     if (this.data.mapScope === 'all') return
-    this.setData({ mapScope: 'all', dayIndex: -1 })
+    const cache = this._dayRoutes || {}
+    const routesReady = (this.data.days || []).some((d) => (d.plans || []).length && cache[d.day_num])
+    this.setData({ mapScope: 'all', dayIndex: -1, routesReady })
     this.renderMap({ fit: true })
     if (this.data.tab === 'bill') this.applyBillFilter()
   },
@@ -360,7 +497,14 @@ Page({
     const dayIndex = Number(e.currentTarget.dataset.index)
     if (this.data.mapScope === 'day' && this.data.dayIndex === dayIndex) return
     const day = this.data.days[dayIndex] || { plans: [] }
-    this.setData({ mapScope: 'day', dayIndex, currentDay: day })
+    const cache = this._dayRoutes || {}
+    const routesReady = !!(day.day_num && cache[day.day_num])
+    this.setData({
+      mapScope: 'day',
+      dayIndex,
+      currentDay: day,
+      routesReady,
+    })
     this.renderMap({ fit: true })
     if (this.data.tab === 'bill') this.applyBillFilter()
   },
@@ -454,15 +598,44 @@ Page({
   /** 顶部地图：当天或全程 */
   async renderMap({ fit = false } = {}) {
     const seq = ++this._mapSeq
-    const withLines = this.data.mode === 'edit' ? this.data.routesReady : true
+    const editing = this.data.mode === 'edit'
     const scope = this.data.mapScope
+    const day = this.data.currentDay
+    const days = this.data.days || []
+
+    if (editing && this.scopeHasCachedRoutes()) {
+      const acc = this.mergeEditRoutesForScope(scope, day, days)
+      if (acc.points.length) {
+        const filled = fillLineRoutes(acc.lines, acc.points, { sketch: false })
+        const markStart = scope !== 'all'
+        const markers = toMarkers(acc.points, {
+          markStart,
+          lines: filled.lines,
+          showLegs: this.data.mapExpanded,
+        })
+        const polyline = linesToPolyline(filled.lines, acc.points)
+        const cacheKey = `edit:${scope}:${acc.points.map((p) => p.id).join(',')}`
+        this._mapCache = {
+          key: cacheKey,
+          markers,
+          polyline,
+          points: acc.points,
+          lines: filled.lines,
+          markStart,
+        }
+        if (seq !== this._mapSeq) return
+        this.setMapView(markers, polyline)
+        if (fit) this.fitMap(acc.points)
+        return
+      }
+    }
+
+    const withLines = editing ? false : true
     if (scope === 'all' && this._previewingAll && this._mapCache) {
       this.setMapView(this._mapCache.markers, this._mapCache.polyline)
       if (fit) this.fitMap(this._mapCache.points)
       return
     }
-    const day = this.data.currentDay
-    const days = this.data.days || []
 
     let localPlans = []
     let markStart = false
@@ -661,41 +834,50 @@ Page({
   onMorePlan(e) {
     if (this.data.aiPending) return
     if (this.data.mode !== 'edit' || !this.data.canEdit) return
-    if (this.data.mapScope === 'all') {
-      wx.showToast({ title: '请先切到具体某一天', icon: 'none' })
-      return
-    }
     const id = Number(e.currentTarget.dataset.id)
     const plan = (this.data.currentDay.plans || []).find((p) => p.id === id)
+      || (this.data.days || []).flatMap((d) => d.plans || []).find((p) => p.id === id)
     if (!plan) return
     const days = this.data.days || []
     const otherDays = days.filter((d) => d.day_num !== plan.day_num)
     const items = ['编辑地点']
-    if (otherDays.length && otherDays.length <= 4) {
-      otherDays.forEach((d) => items.push(`移到 D${d.day_num}`))
-    } else if (otherDays.length > 4) {
-      items.push('移到其他天…')
-    }
+    if (otherDays.length) items.push('换一天')
+    items.push('删除')
     wx.showActionSheet({
       itemList: items,
-      success: async (r) => {
-        if (r.tapIndex === 0) {
-          this.openPlanEdit({ id, plan })
-          return
-        }
-        if (items[r.tapIndex] === '移到其他天…') {
-          this.pickDayToMove(plan)
-          return
-        }
-        const label = items[r.tapIndex] || ''
-        const m = label.match(/D(\d+)/)
-        if (!m) return
-        await this.movePlanToDay(plan, Number(m[1]))
+      success: (r) => {
+        const label = items[r.tapIndex]
+        if (label === '编辑地点') this.openPlanEdit({ id, plan })
+        else if (label === '换一天') this.pickDayToMove(plan)
+        else if (label === '删除') this.removePlan(plan)
       },
     })
   },
   pickDayToMove(plan) {
     this.openDayPick('move', plan)
+  },
+  async removePlan(plan) {
+    if (!plan || !plan.id) return
+    const ok = await new Promise((resolve) => {
+      wx.showModal({
+        title: '删除地点',
+        content: `确定删除「${plan.place_name || '这个地点'}」？`,
+        success: (r) => resolve(r.confirm),
+      })
+    })
+    if (!ok) return
+    wx.showLoading({ title: '删除中' })
+    try {
+      await api.planDel(plan.id)
+      this.invalidateDayRoutes(plan.day_num)
+      await this.loadPlans({ withRoutes: false })
+      await this.renderMap({ fit: false })
+      wx.showToast({ title: '已删除', icon: 'none' })
+    } catch (e) {
+      wx.showToast({ title: (e && e.message) || '删除失败', icon: 'none' })
+    } finally {
+      wx.hideLoading()
+    }
   },
   async movePlanToDay(plan, dayNum) {
     if (!plan || !dayNum || plan.day_num === dayNum) return
@@ -706,10 +888,12 @@ Page({
         id: plan.id,
         day_num: dayNum,
       })
-      this.setData({ routesReady: false, mapScope: 'day' })
+      this.invalidateDayRoutes(plan.day_num, dayNum)
+      this.setData({ mapScope: 'day' })
       const idx = (this.data.days || []).findIndex((d) => d.day_num === dayNum)
       if (idx >= 0) this.setData({ dayIndex: idx })
       await this.loadPlans({ withRoutes: false })
+      await this.renderMap({ fit: false })
       wx.showToast({ title: `已移到 D${dayNum}`, icon: 'none' })
     } finally {
       wx.hideLoading()
@@ -769,13 +953,14 @@ Page({
         day_num: day.day_num,
         ids,
       })
-      this.setData({ routesReady: false })
+      this.invalidateDayRoutes(day.day_num)
       await this.loadPlans({ withRoutes: false })
+      await this.renderMap({ fit: false })
     } finally {
       wx.hideLoading()
     }
   },
-  paintTripLines(acc) {
+  paintTripLines(acc, { fit = false } = {}) {
     const markers = toMarkers(acc.points, {
       markStart: true,
       lines: acc.lines,
@@ -791,11 +976,20 @@ Page({
       markStart: true,
     }
     this.setMapView(markers, polyline)
-    if (acc.points.length) this.fitMap(acc.points)
+    if (fit && acc.points.length) this.fitMap(acc.points)
   },
-  mergeDayRoute(acc, data) {
+  storeDayRoute(dayNum, data) {
+    const points = decoratePlans(data.points || [], '', false)
+    if (!legsComplete(data.lines, points)) return
+    if (!this._dayRoutes) this._dayRoutes = {}
+    this._dayRoutes[dayNum] = {
+      points,
+      lines: navLines(data.lines),
+    }
+  },
+  mergeDayRoute(acc, data, dayNum) {
     const points = decoratePlans(data.points || [], '', true)
-    const filled = fillLineRoutes(data.lines || [], points)
+    const filled = fillLineRoutes(navLines(data.lines), points, { sketch: false })
     ;(points || []).forEach((p) => {
       if (!p.id || acc.seenPt.has(p.id)) return
       acc.seenPt.add(p.id)
@@ -807,6 +1001,7 @@ Page({
       acc.seenLine.add(k)
       acc.lines.push(l)
     })
+    if (dayNum) this.storeDayRoute(dayNum, data)
   },
   async previewDay() {
     if (this.data.generating) return
@@ -829,7 +1024,7 @@ Page({
       if (points.length) {
         points[0] = { ...points[0], isStart: true }
       }
-      const filled = fillLineRoutes(data.lines || [], points)
+      const filled = fillLineRoutes(navLines(data.lines), points, { sketch: false })
       const markers = toMarkers(points, { markStart: true, lines: filled.lines, showLegs: this.data.mapExpanded })
       const polyline = linesToPolyline(filled.lines, points)
       this._mapCache = {
@@ -842,6 +1037,7 @@ Page({
       }
       this.setMapView(markers, polyline)
       this.fitMap(points)
+      this.storeDayRoute(day.day_num, data)
       const listed = await api.planList(this.data.id, day.day_num, true)
       const one = (listed.days || [])[0]
       if (one) {
@@ -869,7 +1065,7 @@ Page({
       this.setData({ generating: false, generatingHint: '' })
     }
   },
-  async previewAll() {
+  async previewAll({ silent = false } = {}) {
     if (this.data.generating) return
     const days = this.data.days || []
     const hasAny = days.some((d) => (d.plans || []).length)
@@ -886,6 +1082,7 @@ Page({
     })
     this._previewingAll = true
     const acc = { points: [], lines: [], seenPt: new Set(), seenLine: new Set() }
+    let firstPaint = true
     try {
       this._mapDrawKey = ''
       for (let i = 0; i < days.length; i++) {
@@ -893,20 +1090,20 @@ Page({
         const day = days[i]
         if (!(day.plans || []).length) continue
         this.setData({ generatingHint: `正在生成 D${day.day_num} 路书` })
-        const data = await api.mapDay(this.data.id, day.day_num, false)
+        const data = await api.mapDay(this.data.id, day.day_num, false, false)
         if (this.data.mapScope !== 'all') break
-        this.mergeDayRoute(acc, data)
-        this.paintTripLines(acc)
+        this.mergeDayRoute(acc, data, day.day_num)
+        this.paintTripLines(acc, { fit: firstPaint })
+        firstPaint = false
       }
       await this.loadPlans({ withRoutes: true, skipMap: true })
-      if (this.data.mapScope === 'all') {
-        this.setData({ mapScope: 'all', dayIndex: -1 })
-        if (acc.points.length) this.paintTripLines(acc)
-      }
+      await this.loadEditRouteCaches()
+      this.setData({ mapScope: 'all', dayIndex: -1, routesReady: this.scopeHasCachedRoutes() })
+      if (acc.points.length) this.paintTripLines(acc, { fit: false })
       getApp().markTripsDirty && getApp().markTripsDirty()
-      wx.showToast({ title: '全程已预览', icon: 'success' })
+      if (!silent) wx.showToast({ title: '全程已预览', icon: 'success' })
     } catch (e) {
-      wx.showToast({ title: (e && e.message) || '预览失败', icon: 'none' })
+      if (!silent) wx.showToast({ title: (e && e.message) || '预览失败', icon: 'none' })
     } finally {
       this._previewingAll = false
       this.setData({ generating: false, generatingHint: '' })
@@ -925,16 +1122,27 @@ Page({
       if (hasAny && !this.data.routesReady) {
         await this.loadPlans({ withRoutes: true })
       }
-      this.setData({ mode: 'browse', tab: 'plan', routesReady: true, aiEntry: false, aiOpen: false })
-      wx.setNavigationBarTitle({ title: this.data.trip.travel_name || '旅途' })
-      await this.renderMap({ fit: false })
       getApp().markTripsDirty && getApp().markTripsDirty()
+      this.leaveToDetail()
     } catch (e) {
       wx.showToast({ title: (e && e.message) || '保存失败', icon: 'none' })
     } finally {
       this.setData({ generating: false })
       wx.hideLoading()
     }
+  },
+  leaveToDetail() {
+    const pages = getCurrentPages()
+    const prev = pages[pages.length - 2]
+    if (prev && prev.route === 'pages/travel/home') {
+      if (typeof prev.markPlansStale === 'function') prev.markPlansStale()
+      prev._needFullRoutes = true
+      wx.navigateBack()
+      return
+    }
+    this.setData({ mode: 'browse', tab: 'plan', routesReady: true, aiEntry: false, aiOpen: false })
+    wx.setNavigationBarTitle({ title: this.data.trip.travel_name || '旅途' })
+    this.renderMap({ fit: false })
   },
   keepAi() {
     this._aiBackup = null
@@ -1009,8 +1217,11 @@ Page({
       this._aiHadRun = false
       this._mapCache = null
       this._mapDrawKey = ''
-      this.setData({ aiOpen: false, aiPending: false, aiEntry: false, aiIntro: '', routesReady: false })
+      this.setData({ aiOpen: false, aiPending: false, aiEntry: false, aiIntro: '' })
+      this.invalidateDayRoutes()
       await this.loadPlans({ withRoutes: false })
+      await this.loadEditRouteCaches()
+      await this.renderMap({ fit: false })
       wx.showToast({ title: '已取消', icon: 'none' })
     } catch (e) {
       wx.showToast({ title: (e && e.message) || '取消失败', icon: 'none' })
@@ -1060,6 +1271,7 @@ Page({
         : ((draft && draft.summary) || '行程已排好')
       ).trim()
       this._aiHadRun = true
+      this.invalidateDayRoutes()
       this.setData({
         aiOpen: false,
         aiKb: 0,

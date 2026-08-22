@@ -20,10 +20,11 @@ const api = {
   travelCompanion: (data) => request({ url: '/api/travel/companion', method: 'POST', data }),
   travelGroup: (data) => request({ url: '/api/travel/group', method: 'POST', data }),
 
-  planList: (travel_id, day_num, routes = true) => {
+  planList: (travel_id, day_num, routes = true, cacheOnly = false) => {
     let url = `/api/plan/list?travel_id=${travel_id}`
     if (day_num) url += `&day_num=${day_num}`
     if (!routes) url += '&routes=0'
+    else if (cacheOnly) url += '&cache_only=1'
     return request({ url })
   },
   planSave: (data) => request({ url: '/api/plan/save', method: 'POST', data }),
@@ -32,12 +33,17 @@ const api = {
   planMove: (data) => request({ url: '/api/plan/move', method: 'POST', data }),
   planAiDraft: (data) => request({ url: '/api/plan/ai-draft', method: 'POST', data, timeout: 60000 }),
   planAiApply: (data) => request({ url: '/api/plan/ai-apply', method: 'POST', data, timeout: 30000 }),
-  mapDay: (travel_id, day_num, fresh = false) => {
+  mapDay: (travel_id, day_num, fresh = false, cacheOnly = false) => {
     let url = `/api/map/day?travel_id=${travel_id}&day_num=${day_num}`
     if (fresh) url += '&fresh=1'
+    if (cacheOnly) url += '&cache_only=1'
     return request({ url, timeout: 25000 })
   },
-  mapGlobal: (travel_id) => request({ url: `/api/map/global?travel_id=${travel_id}`, timeout: 25000 }),
+  mapGlobal: (travel_id, cacheOnly = false) => {
+    let url = `/api/map/global?travel_id=${travel_id}`
+    if (cacheOnly) url += '&cache_only=1'
+    return request({ url, timeout: 25000 })
+  },
   mapSearch: (q, lng, lat) => {
     let url = `/api/map/search?q=${encodeURIComponent(q || '')}`
     if (lng && lat) url += `&lng=${lng}&lat=${lat}`

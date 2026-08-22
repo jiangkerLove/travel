@@ -72,7 +72,7 @@ Page({
         showCancel: false,
         success: () => {
           wx.redirectTo({
-            url: `/pages/travel/home?id=${t.id}&mode=edit&name=${encodeURIComponent(t.travel_name || travel_name)}&dest=${encodeURIComponent(t.destination || destination)}`,
+            url: `/pages/travel/home?id=${t.id}&mode=browse&openEdit=1&name=${encodeURIComponent(t.travel_name || travel_name)}&dest=${encodeURIComponent(t.destination || destination)}`,
           })
         },
       })
