@@ -159,6 +159,10 @@ Page({
     aiMissCount: 0,
     aiDayNum: 0,
     aiPending: false,
+    aiEntry: false,
+    dayPickOpen: false,
+    dayPickTitle: '加到哪一天',
+    dayPickDays: [],
   },
   onLoad(q) {
     const mode = q.mode === 'edit' ? 'edit' : 'browse'
@@ -258,7 +262,7 @@ Page({
     }
     if (this.data.mode === 'edit' && !canEdit) {
       wx.setNavigationBarTitle({ title: trip.travel_name || '旅途' })
-      this.setData({ mode: 'browse', tab: 'plan', canEdit: false, canBill, routesReady: true })
+      this.setData({ mode: 'browse', tab: 'plan', canEdit: false, canBill, routesReady: true, aiEntry: false, aiOpen: false })
       this.applyTrip(trip)
       await this.loadPlans()
       return
@@ -579,20 +583,59 @@ Page({
       return
     }
     if (this.data.mapScope === 'all') {
-      const labels = (this.data.days || []).map((d) => `加到 D${d.day_num}`)
-      if (!labels.length) return
-      wx.showActionSheet({
-        itemList: labels.length <= 6 ? labels : labels.slice(0, 6),
-        success: (r) => {
-          const day = this.data.days[r.tapIndex]
-          if (!day) return
-          this.setData({ mapScope: 'day', dayIndex: r.tapIndex, currentDay: day })
-          this.openFormAdd()
-        },
-      })
+      this.openDayPick('add')
       return
     }
     this.openFormAdd()
+  },
+  openDayPick(purpose, plan) {
+    const days = this.data.days || []
+    if (!days.length) {
+      wx.showToast({ title: '还没有行程日期', icon: 'none' })
+      return
+    }
+    this._dayPickPurpose = purpose
+    this._movePlan = plan || null
+    this._dayPickIgnoreUntil = Date.now() + 400
+    const cur = plan && plan.day_num
+    const dayPickDays = days.map((d, index) => {
+      const count = (d.plans || []).length
+      const here = purpose === 'move' && d.day_num === cur
+      return {
+        day_num: d.day_num,
+        shortDate: d.shortDate || (d.date || '').slice(5),
+        date: d.date || '',
+        index,
+        disabled: here,
+        hint: here ? '当前所在天' : (count ? `${count} 个地点` : '还空着'),
+      }
+    })
+    this.setData({
+      dayPickOpen: true,
+      dayPickTitle: purpose === 'move' ? '移到哪一天' : '加到哪一天',
+      dayPickDays,
+    })
+  },
+  closeDayPick() {
+    if (this._dayPickIgnoreUntil && Date.now() < this._dayPickIgnoreUntil) return
+    this.setData({ dayPickOpen: false })
+  },
+  onPickDay(e) {
+    const dayNum = Number(e.currentTarget.dataset.day)
+    const row = (this.data.dayPickDays || []).find((d) => d.day_num === dayNum)
+    if (!row || row.disabled) return
+    this.setData({ dayPickOpen: false })
+    if (this._dayPickPurpose === 'add') {
+      const day = (this.data.days || [])[row.index]
+        || (this.data.days || []).find((d) => d.day_num === dayNum)
+      if (!day) return
+      this.setData({ mapScope: 'day', dayIndex: row.index, currentDay: day })
+      this.openFormAdd()
+      return
+    }
+    if (this._dayPickPurpose === 'move' && this._movePlan) {
+      this.movePlanToDay(this._movePlan, dayNum)
+    }
   },
   editPlan(e) {
     if (this._justDragged) return
@@ -641,22 +684,7 @@ Page({
     })
   },
   pickDayToMove(plan) {
-    const days = this.data.days || []
-    const labels = days
-      .filter((d) => d.day_num !== plan.day_num)
-      .map((d) => `D${d.day_num} · ${d.shortDate || ''}`)
-    if (!labels.length) {
-      wx.showToast({ title: '没有其他天数', icon: 'none' })
-      return
-    }
-    wx.showActionSheet({
-      itemList: labels,
-      success: async (r) => {
-        const targets = days.filter((d) => d.day_num !== plan.day_num)
-        const day = targets[r.tapIndex]
-        if (day) await this.movePlanToDay(plan, day.day_num)
-      },
-    })
+    this.openDayPick('move', plan)
   },
   async movePlanToDay(plan, dayNum) {
     if (!plan || !dayNum || plan.day_num === dayNum) return
@@ -776,7 +804,7 @@ Page({
       if (hasAny && !this.data.routesReady) {
         await this.loadPlans({ withRoutes: true })
       }
-      this.setData({ mode: 'browse', tab: 'plan', routesReady: true })
+      this.setData({ mode: 'browse', tab: 'plan', routesReady: true, aiEntry: false, aiOpen: false })
       wx.setNavigationBarTitle({ title: this.data.trip.travel_name || '旅途' })
       await this.renderMap({ fit: false })
     } catch (e) {
@@ -786,31 +814,43 @@ Page({
       wx.hideLoading()
     }
   },
-  openAi() {
+  openAi({ all } = {}) {
     if (!this.data.canEdit) {
       wx.showToast({ title: '没有改行程权限', icon: 'none' })
       return
     }
-    let aiDayNum = this.data.aiDayNum || 0
-    if (!this.data.aiPending && this.data.mapScope === 'day') {
-      aiDayNum = (this.data.currentDay && this.data.currentDay.day_num)
-        || ((this.data.days || [])[this.data.dayIndex] || {}).day_num
-        || 0
+    this._aiIgnoreCloseUntil = Date.now() + 500
+    let aiDayNum = 0
+    if (this.data.aiPending) {
+      aiDayNum = this.data.aiDayNum || 0
+    } else if (!all) {
+      aiDayNum = 0
     }
-    this.setData({ aiOpen: true, aiDayNum })
+    wx.setNavigationBarTitle({ title: 'AI 排行程' })
+    this.setData({ aiOpen: true, aiDayNum, aiEntry: true })
   },
   closeAi() {
     if (this.data.aiLoading || this.data.aiApplying) return
+    if (this._aiIgnoreCloseUntil && Date.now() < this._aiIgnoreCloseUntil) return
     this.setData({ aiOpen: false })
   },
+  onAiMask() {},
+  onAiSheetTap() {},
   onAiPrompt(e) {
     this.setData({ aiPrompt: e.detail.value })
   },
   setAiDay(e) {
-    const aiDayNum = Number(e.currentTarget.dataset.v) || 0
-    if (aiDayNum === this.data.aiDayNum) return
+    const raw = e.currentTarget.dataset.scope
+    const aiDayNum = raw === 'all' || raw == null || raw === '' ? 0 : Number(raw)
+    if (Number.isNaN(aiDayNum) || aiDayNum === this.data.aiDayNum) return
+    this._aiIgnoreCloseUntil = Date.now() + 400
     if (this.data.aiPending) this.restoreAiBackup()
-    this.setData({ aiDayNum, aiDraft: null, aiMissCount: 0 })
+    this.setData({
+      aiOpen: true,
+      aiDayNum,
+      aiDraft: null,
+      aiMissCount: 0,
+    })
   },
   decorateAiDraft(draft) {
     const days = (draft && draft.days) || []
@@ -859,11 +899,12 @@ Page({
     }
     this._mapCache = null
     this._mapDrawKey = ''
+    const mapScope = focusDay ? 'day' : 'all'
     this.setData({
       days,
-      mapScope: 'day',
-      dayIndex,
-      currentDay: days[dayIndex] || { plans: [] },
+      mapScope,
+      dayIndex: focusDay ? dayIndex : -1,
+      currentDay: days[Math.max(dayIndex, 0)] || { plans: [] },
       routesReady: false,
       aiPending: true,
     })
@@ -1343,8 +1384,6 @@ Page({
     if (this.data.canEdit) {
       items.push('排行程')
       actions.push('plan')
-      items.push('AI 排行程')
-      actions.push('ai')
     }
     if (trip.role === 1) {
       items.push('修改旅途')
@@ -1361,12 +1400,9 @@ Page({
         const action = actions[r.tapIndex]
         setTimeout(() => {
           if (action === 'plan') this.enterEdit()
-          else if (action === 'ai') {
-            this.enterEdit()
-            this.openAi()
-          } else if (action === 'edit') this.goEditTravel()
+          else if (action === 'edit') this.goEditTravel()
           else if (action === 'archive') this.archive()
-        }, 50)
+        }, 80)
       },
     })
   },

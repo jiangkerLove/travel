@@ -70,6 +70,9 @@
     <view class="edit-banner" wx:elif="{{aiPending}}">
       <text>AI 预览中 · 取消可还原原来的行程</text>
     </view>
+    <view class="edit-banner" wx:elif="{{aiEntry}}">
+      <text>AI 排程 · 全程或某一天都可以，点底栏打开</text>
+    </view>
     <view class="edit-banner" wx:elif="{{!routesReady}}">
       <text>排点中 · 预览后看路线与用时</text>
     </view>
@@ -307,26 +310,26 @@
     <view class="edit-bar-btn main" bind:tap="finishEdit">完成</view>
   </view>
 
-  <view class="ai-mask" wx:if="{{aiOpen}}" catch:tap="closeAi">
-    <view class="ai-sheet" catch:tap="">
+  <view class="ai-mask" wx:if="{{aiOpen}}" catch:tap="onAiMask">
+    <view class="ai-sheet" catch:tap="onAiSheetTap">
       <view class="ai-head">
         <view>
           <view class="ai-title">AI 排行程</view>
           <view class="ai-sub" wx:if="{{trip.start_date}}">{{trip.start_date}} – {{trip.end_date}} · {{days.length}} 天</view>
         </view>
-        <view class="ai-close" bind:tap="closeAi">收起</view>
+        <view class="ai-close" catch:tap="closeAi">收起</view>
+      </view>
+      <view class="ai-scope">
+        <view class="ai-chip {{aiDayNum === 0 ? 'on' : ''}}" catch:tap="setAiDay" data-scope="all">全程</view>
+        <view
+          class="ai-chip {{aiDayNum === item.day_num ? 'on' : ''}}"
+          wx:for="{{days}}"
+          wx:key="day_num"
+          catch:tap="setAiDay"
+          data-scope="{{item.day_num}}"
+        >D{{item.day_num}}</view>
       </view>
       <scroll-view scroll-y class="ai-body" enhanced show-scrollbar="{{false}}">
-        <scroll-view scroll-x class="ai-scope" show-scrollbar="{{false}}">
-          <view class="ai-chip {{aiDayNum === 0 ? 'on' : ''}}" bind:tap="setAiDay" data-v="0">全程</view>
-          <view
-            class="ai-chip {{aiDayNum === item.day_num ? 'on' : ''}}"
-            wx:for="{{days}}"
-            wx:key="day_num"
-            bind:tap="setAiDay"
-            data-v="{{item.day_num}}"
-          >D{{item.day_num}}</view>
-        </scroll-view>
         <view class="ai-hint" wx:if="{{aiDayNum === 0}}">粘贴小红书等链接，或写要去哪、必去和不去的地方。生成后先出现在行程里，取消会还原。</view>
         <view class="ai-hint" wx:else>只改 D{{aiDayNum}}。可以写「加上洱海骑行」「晚饭换一家」「去掉喜洲」，没提到的地点会尽量保留。</view>
         <textarea
@@ -339,7 +342,7 @@
           bindinput="onAiPrompt"
         />
         <view class="ai-row">
-          <view class="ai-btn ghost {{aiLoading ? 'off' : ''}}" bind:tap="runAiDraft">{{aiDraft ? '重新生成' : (aiDayNum ? '生成这一天' : '生成行程')}}</view>
+          <view class="ai-btn ghost {{aiLoading ? 'off' : ''}}" catch:tap="runAiDraft">{{aiDraft ? '重新生成' : (aiDayNum ? '生成这一天' : '生成行程')}}</view>
         </view>
         <view class="ai-preview" wx:if="{{aiDraft}}">
           <view class="ai-summary">{{aiDraft.summary}}</view>
@@ -352,9 +355,33 @@
           </view>
           <view class="ai-miss" wx:if="{{aiMissCount}}">有 {{aiMissCount}} 个点暂时没标到地图，保存后可再改。</view>
           <view class="ai-actions">
-            <view class="ai-btn ghost {{aiApplying ? 'off' : ''}}" bind:tap="cancelAi">取消还原</view>
-            <view class="ai-btn main tight {{aiApplying ? 'off' : ''}}" bind:tap="applyAiDraft">保存到行程</view>
+            <view class="ai-btn ghost {{aiApplying ? 'off' : ''}}" catch:tap="cancelAi">取消还原</view>
+            <view class="ai-btn main tight {{aiApplying ? 'off' : ''}}" catch:tap="applyAiDraft">保存到行程</view>
           </view>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+
+  <view class="ai-mask" wx:if="{{dayPickOpen}}" catch:tap="closeDayPick">
+    <view class="ai-sheet day-pick-sheet" catch:tap="onAiSheetTap">
+      <view class="ai-head">
+        <view class="ai-title">{{dayPickTitle}}</view>
+        <view class="ai-close" catch:tap="closeDayPick">取消</view>
+      </view>
+      <scroll-view scroll-y class="day-pick-list" enhanced show-scrollbar="{{false}}">
+        <view
+          class="day-pick-row {{item.disabled ? 'off' : ''}}"
+          wx:for="{{dayPickDays}}"
+          wx:key="day_num"
+          catch:tap="onPickDay"
+          data-day="{{item.day_num}}"
+        >
+          <view>
+            <view class="day-pick-n">D{{item.day_num}} · {{item.shortDate}}</view>
+            <view class="day-pick-s">{{item.hint}}</view>
+          </view>
+          <text class="settle-arrow" wx:if="{{!item.disabled}}">›</text>
         </view>
       </scroll-view>
     </view>

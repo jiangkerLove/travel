@@ -885,13 +885,14 @@ page {
 }
 
 .ai-scope {
-  white-space: nowrap;
-  margin: 4rpx 0 16rpx;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+  padding: 8rpx 28rpx 16rpx;
 }
 
 .ai-chip {
   display: inline-block;
-  margin-right: 10rpx;
   padding: 8rpx 22rpx;
   border-radius: 999rpx;
   background: #fff;
@@ -1025,4 +1026,40 @@ page {
   margin-top: 8rpx;
   font-size: 22rpx;
   color: #c17b74;
+}
+
+.day-pick-sheet {
+  max-height: 72vh;
+}
+
+.day-pick-list {
+  max-height: calc(72vh - 120rpx);
+  padding: 0 12rpx 24rpx;
+  box-sizing: border-box;
+}
+
+.day-pick-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin: 0 16rpx;
+  padding: 22rpx 8rpx;
+  border-bottom: 1rpx solid #e6f0ea;
+}
+
+.day-pick-row.off {
+  opacity: 0.45;
+}
+
+.day-pick-n {
+  font-size: 28rpx;
+  font-weight: 650;
+  color: #2f3b35;
+}
+
+.day-pick-s {
+  margin-top: 4rpx;
+  font-size: 22rpx;
+  color: #8fa19a;
 }
