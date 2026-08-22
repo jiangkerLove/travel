@@ -309,7 +309,7 @@
   </view>
 
   <view class="ai-mask" wx:if="{{aiOpen}}" catch:tap="onAiMask">
-    <view class="ai-sheet" catch:tap="onAiSheetTap">
+    <view class="ai-sheet" style="margin-bottom: {{aiKb}}px;" catch:tap="onAiSheetTap">
       <view class="ai-head">
         <view>
           <view class="ai-title">AI 排行程</view>
@@ -331,23 +331,27 @@
           data-scope="{{item.day_num}}"
         >D{{item.day_num}}</view>
       </view>
-      <scroll-view scroll-y class="ai-body" enhanced show-scrollbar="{{false}}">
-        <view class="ai-hint" wx:if="{{aiMode === 'recommend'}}">按现在的路线推荐顺路景点，原地点会保留。可以写偏好，也可以直接推荐。</view>
-        <view class="ai-hint" wx:elif="{{aiDayNum === 0}}">粘贴小红书等链接，或写要去哪、必去和不去的地方。生成后收起看路线，合适再保存。</view>
-        <view class="ai-hint" wx:else>只改 D{{aiDayNum}}。可以写「加上洱海骑行」「晚饭换一家」「去掉喜洲」，没提到的地点会尽量保留。</view>
+      <view class="ai-body">
+        <view class="ai-hint" wx:if="{{aiMode === 'recommend'}}">不改现在的走法，只在路线附近推荐景点。可以写偏好，也可以直接推荐。</view>
+        <view class="ai-hint" wx:elif="{{aiDayNum === 0}}">写要去哪或粘贴链接，会按你的描述全新排一版，不沿用现在的地点。第一版之后再生成，才会在上一版上改。</view>
+        <view class="ai-hint" wx:else>只改 D{{aiDayNum}}。第一版按你的描述重排；之后再生成才基于上一版加减。</view>
         <textarea
           class="ai-input"
           value="{{aiPrompt}}"
           maxlength="2000"
-          placeholder="{{aiMode === 'recommend' ? '例如：想多看古镇，或只要顺路、别太累（可不填）' : (aiDayNum === 0 ? '例如：去川西，要去四姑娘山和丹巴，不去新都桥' : '例如：这天加上洱海日落，去掉喜洲，晚饭轻松一点')}}"
+          placeholder="{{aiMode === 'recommend' ? '例如：想多看古镇，或只要顺路、别太累（可不填）' : (aiDayNum === 0 ? '例如：去川西，要去四姑娘山和丹巴，不去新都桥' : '例如：这天加上洱海日落，去掉喜洲')}}"
           placeholder-class="ai-ph"
-          adjust-position="{{true}}"
+          adjust-position="{{false}}"
+          cursor-spacing="24"
+          hold-keyboard="{{true}}"
+          show-confirm-bar="{{false}}"
           bindinput="onAiPrompt"
+          bindkeyboardheightchange="onAiKeyboard"
         />
         <view class="ai-row">
           <view class="ai-btn main tight {{aiLoading ? 'off' : ''}}" catch:tap="runAiDraft">{{aiMode === 'recommend' ? '推荐并预览' : (aiDayNum ? '生成这一天' : '生成并预览')}}</view>
         </view>
-      </scroll-view>
+      </view>
     </view>
   </view>
 

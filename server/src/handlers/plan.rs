@@ -836,6 +836,7 @@ pub struct AiDraftReq {
     pub prompt: String,
     pub day_num: Option<i32>,
     pub mode: Option<String>,
+    pub fresh: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -888,7 +889,8 @@ pub async fn ai_draft(
         None => None,
     };
     let plans = list_plans(&state.pool, req.travel_id, None).await?;
-    let recommend = req.mode.as_deref() == Some("recommend");
+    let fresh = req.fresh.unwrap_or(false);
+    let recommend = !fresh && req.mode.as_deref() == Some("recommend");
     if recommend && plans.is_empty() {
         return Err(AppError::BadRequest("先排几个地点，再沿途推荐".into()));
     }
@@ -904,6 +906,7 @@ pub async fn ai_draft(
         &req.prompt,
         focus_day,
         recommend,
+        fresh,
     )
     .await?;
     Ok(ok(draft))

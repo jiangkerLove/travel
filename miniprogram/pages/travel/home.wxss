@@ -868,6 +868,7 @@ page {
   display: flex;
   flex-direction: column;
   padding-bottom: env(safe-area-inset-bottom);
+  box-sizing: border-box;
 }
 
 .ai-head {
@@ -898,7 +899,6 @@ page {
 }
 
 .ai-body {
-  max-height: calc(86vh - 120rpx);
   padding: 0 28rpx 28rpx;
   box-sizing: border-box;
 }
