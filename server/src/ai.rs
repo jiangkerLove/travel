@@ -5,7 +5,7 @@ use serde_json::{json, Value};
 use crate::{
     error::AppError,
     poi::{geocode_address, looks_like_admin_place, pick_best_poi, search_places, PoiVo},
-    util::valid_point_type,
+    util::{parse_date, valid_point_type},
 };
 
 const DEEPSEEK_URL: &str = "https://api.deepseek.com/chat/completions";
@@ -174,37 +174,124 @@ fn finish_day_end(p: &mut AiPoint, is_trip_last_day: bool) {
     }
 }
 
-const SYSTEM_ROLE: &str = "你是资深自驾游与自由行行程规划师，熟悉中国路况与景区分布。只输出 JSON，不要 markdown，不要解释。";
+const SYSTEM_ROLE: &str = "你是旅游环线规划引擎，专精中国自驾/自由行。只输出 JSON，不要 markdown，不要正文解释。";
+
+const USER_FIRST: &str = "\
+【0. 最高优先级】用户输入中的约束高于一切默认规则。\
+「不去/排除/别去」的景点：不得出现，也不得作为必经路段。\
+「顺时针/逆时针」：全程锁定该方向，不得中途反向。\
+「必去」：必须安排；「可选」：有余力再排。用户未指定方向时，选地理上闭合、少折返的环线即可。";
+
+const TRIP_FACTS_RULE: &str = "\
+【行程事实】默认按系统已创建的旅途日期与天数规划（起止日期、总天数、D1/D2 对应日历均由系统自动带入），不得自行改天数或日期。\
+仅当用户明确要求调整出行时间、延长/缩短行程、改第几天安排时，才可偏离系统日期。\
+用户在需求里随口写的日期/天数若与系统不一致，一律忽略。\
+用户需求默认只写：景点、必去/不去、顺逆时针、车程节奏、游玩风格。";
+
+const LOOP_DIRECTION_RULE: &str = "\
+【1. 环线方向锁定】\
+先确定主线方向（顺时针或逆时针，以用户为准），全程保持一致。\
+每日 theme 开头标注方向，格式如「逆时针·D2」或「顺时针·D3」。\
+禁止放射式绕行：反例「宜宾→乐山→自贡→眉山→又回到宜宾另一侧景点」；\
+正例：沿环边界单向前进，每天住宿点沿主线推进，最终闭合回出发方向。";
+
+const LODGING_RULE: &str = "\
+【2. 住宿向前推进】\
+每天最后一个点（point_type=hotel）必须是具体镇/县/片区地名，如「乐山市区」「九寨沟沟口」「日隆镇」。\
+禁止「途中休息」「路上」「附近」等模糊词。\
+住宿须沿主线方向前移；禁止连续两天住同一地却往相反方向跑远（基地模式）。\
+例外：同一城市连住多日时，每天游览不同片区，且不重复昨日已走的主路段。";
+
+const DETOUR_RULE: &str = "\
+【3. 折返管控】\
+允许当日短线支线折返（如进峡谷景区后原路返回主线），但须当日完成、不跨日。\
+禁止连续两天及以上重复同一段折返路。\
+避免大面积来回折返；整体折返路段宜少。默认每日纯驾车约不超过4小时（用户另有说明从其要求）。";
+
+const EXCLUDE_RULE: &str = "\
+【4. 排除过滤】\
+用户标注不去的景点，任何情况下不得出现在 place_name、query、note 中，也不得安排为途经点。";
 
 const OUTPUT_FORMAT: &str = "\
-【输出格式】place_name 必须是具体景区、地标、镇村名，不要只写地级市/省会名（错误：松原市当景点；正确：查干湖、乾安泥林；过夜写前郭县、日隆镇等）。query 写成「城市 具体地点」（如「松原 查干湖」），不要只写城市名，避免定位偏到机场。不要输出 longitude/latitude，坐标由系统查询。point_type 仅 sight/hotel/food/gas/transport；每天 3-6 个点（含过夜点）；arrive 用 HH:MM，随路程先后递增；stay_minutes 合理估算游览时长；note 只写一句必要提醒；summary 用一两句话说明整趟或当天怎么走；theme 写当天一句话主题。";
+【5. 输出字段】\
+place_name：具体景区/地标/镇村，不写单独地级市名。\
+query：「城市 具体地点」，辅助高德定位。\
+point_type：sight/hotel/food/gas/transport。\
+每天 3-6 点（含过夜点）。arrive 用 HH:MM，随游览顺序递增。\
+note：一句实用提醒（门票/预约/路况）。\
+theme：当天主题，须含环线方向标注。\
+summary：一两句话概括全程；末尾附路线健康度自检，格式：「自检：方向✓/排除✓/住宿具体✓/无连续重复路段✓」（某项有问题则写✗并简述）。\
+不要输出 longitude/latitude。";
 
-const PLANNING_METHOD: &str = "\
-【规划步骤】先按天划定活动范围并确定当晚住宿镇/县 → 再选当天顺路可达的景区 → 按动线从早到晚排点 → 自检是否折返或重复地名 → 最后填 arrive 与 stay_minutes。全程住宿地尽量少换，整体路线向前推进。";
+const DEDUP_RULE: &str = "\
+【6. 去重】同一地点当天只出现一次；禁止相邻两个相同地名。古镇与同名镇算一地。";
 
-const OVERNIGHT_RULE: &str = "\
-【过夜】每天最后一个点必须是能过夜的镇、乡、村或县城，place_name 只写地名（如日隆镇、塔河县），point_type=hotel。不写具体酒店/民宿名。不用景区、山顶、观景台收尾。最后一天若返程，末点可为机场或车站（point_type=transport）。";
-
-const PLACE_DEDUP_RULE: &str = "\
-【去重】每个地点在当天只出现一次。相邻两点不能是同一地方，禁止连续两个完全相同地名（如两个「塔河县」）。古镇/镇/古城算同一地，不要「日隆古镇」后又排「日隆镇」。若当天在某镇活动，该镇只作最后过夜点，前面不把该镇当景点重复列出。";
-
-const ROUTE_ORDER_RULE: &str = "\
-【顺路】每天的点按实际驾车动线从早到晚串联，一路走向当晚住宿地，避免折返和走回头路。排点前在脑中画路线：每去下一个点应比折回去更近住宿地方向，不要出现「东→西→再东」「A→B→又回到 A 附近」的走法。路上风景、观景台也可作游览点，不必套用固定时段模板，早中晚按路程与景点特点合理安排即可。summary 可简要说明当天动线方向（如「一路向北」「沿国道 318 西行」）。";
-
-const CROSS_DAY_RULE: &str = "\
-【跨天】今天在哪过夜，明天默认从那里出发；下一天第一个点应是新的游览目的地，不要重复昨夜住宿地名。相邻两天的活动区域宜向前推进，不要把后一天的点安排在需要折返回昨天路过区域的地方。";
+const SELF_CHECK_RULE: &str = "\
+【7. 生成后自检（写入 summary）】逐项核对：①方向是否全程一致；②是否含排除景点；③每晚住宿是否具体地名；④是否有连续两天重复路段；⑤是否呈放射式绕行。有问题在 summary 自检中标注✗。";
 
 fn system_prompt() -> String {
     [
         SYSTEM_ROLE,
+        USER_FIRST,
+        TRIP_FACTS_RULE,
+        LOOP_DIRECTION_RULE,
+        LODGING_RULE,
+        DETOUR_RULE,
+        EXCLUDE_RULE,
         OUTPUT_FORMAT,
-        PLANNING_METHOD,
-        OVERNIGHT_RULE,
-        PLACE_DEDUP_RULE,
-        ROUTE_ORDER_RULE,
-        CROSS_DAY_RULE,
+        DEDUP_RULE,
+        SELF_CHECK_RULE,
     ]
     .concat()
+}
+
+/// 从用户文字里提取关键约束，再强调一遍给模型
+fn constraint_reminder(prompt: &str) -> String {
+    let p = prompt.trim();
+    if p.is_empty() {
+        return String::new();
+    }
+    let mut lines = Vec::new();
+    if ["不去", "不要", "别去", "排除", "不想去", "不去的"]
+        .iter()
+        .any(|k| p.contains(k))
+    {
+        lines.push("→ 排除过滤：用户写明不去的景点一律不得出现或途经。");
+    }
+    if p.contains("逆时针") {
+        lines.push("→ 环线方向锁定：全程逆时针，禁止按顺时针排。");
+    } else if p.contains("顺时针") {
+        lines.push("→ 环线方向锁定：全程顺时针，禁止按逆时针排。");
+    }
+    if p.contains("必去") || p.contains("一定要去") {
+        lines.push("→ 标注「必去」的景点必须安排进路线。");
+    }
+    if p.contains("小时") || p.contains("车程") {
+        lines.push("→ 遵守用户写的每日车程上限。");
+    } else {
+        lines.push("→ 默认每日纯驾车约不超过4小时。");
+    }
+    if ["放射", "折返", "重复路"]
+        .iter()
+        .any(|k| p.contains(k))
+    {
+        lines.push("→ 按用户纠偏要求调整：消除放射式绕行或连续重复路段。");
+    }
+    format!("\n【约束复核（必须遵守）】\n{}", lines.join("\n"))
+}
+
+/// 根据旅途开始日期列出 D1、D2… 对应公历
+fn trip_day_dates(start: &str, days: i32) -> String {
+    let Ok(base) = parse_date(start) else {
+        return String::new();
+    };
+    (0..days)
+        .map(|i| {
+            let d = base + chrono::Duration::days(i as i64);
+            format!("D{}={}", i + 1, d)
+        })
+        .collect::<Vec<_>>()
+        .join("，")
 }
 
 /// 地名完全相同，或高德查到的坐标几乎重合
@@ -385,7 +472,7 @@ async fn chat_json(api_key: &str, user_content: String) -> Result<ModelOut, AppE
     headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
     let body = json!({
         "model": DEEPSEEK_MODEL,
-        "temperature": 0.3,
+        "temperature": 0.2,
         "thinking": { "type": "disabled" },
         "response_format": { "type": "json_object" },
         "messages": [
@@ -521,20 +608,21 @@ pub async fn draft_itinerary(
         return Err(AppError::BadRequest("描述太长，精简一下再试".into()));
     }
     let links = collect_link_notes(prompt).await;
+    let constraint = constraint_reminder(prompt);
     let prefer = if prompt.is_empty() {
-        "无特别偏好：选经典顺路景点，节奏适中，每天车程不宜过长。".into()
+        "按系统已定的出行日期和天数安排，经典环线，节奏适中，每日驾车约4小时内。".into()
     } else {
         prompt.to_string()
     };
     let (existing_line, scope) = if fresh {
         (
-            "无（全新规划，不得沿用或模仿任何旧地点）。".into(),
+            "无。".into(),
             match focus_day {
                 Some(d) => format!(
-                    "【任务】从零规划第 {d} 天。结合目的地与总天数，安排顺路景点并以镇/县过夜收尾。只输出第 {d} 天。"
+                    "任务：从零规划第 {d} 天环线片段，融入全程 {days} 天布局，遵守环线方向与住宿推进规则。只输出 day_num={d}。"
                 ),
                 None => format!(
-                    "【任务】从零规划全部 {days} 天。day_num 从 1 到 {days}，每天顺路串联、以镇/县过夜，整体路线连贯向前。避开用户不想去的地方。"
+                    "任务：从零规划 {days} 天完整环线。先定顺/逆时针方向，再按日推进住宿与景点，避免放射式绕行。day_num 从 1 到 {days}。"
                 ),
             },
         )
@@ -543,10 +631,10 @@ pub async fn draft_itinerary(
             existing.to_string(),
             match focus_day {
                 Some(d) => format!(
-                    "【任务】沿途推荐，只改第 {d} 天。必须原样保留该天已有地点及先后顺序，不得删点、换序、改线。只在相邻两点之间的顺路方向上插入 1-2 个新景区，插在当天过夜点之前。新点须与已有点不同地、不同镇，不插同名或同镇点（如已有日隆镇则不加日隆古镇）。只输出第 {d} 天。"
+                    "任务：沿途推荐，只改第 {d} 天。保留已有地点和顺序，沿当前环线方向顺路插入 1-2 个新景区（过夜点之前）。不插排除景点。只输出 day_num={d}。"
                 ),
                 None => format!(
-                    "【任务】沿途推荐。必须原样保留每天已有地点及先后顺序，不得删点、换序、重排。只在现有路线顺路方向每天插入 1-2 个新景区，插在过夜点之前。新点不得与已有点同名或同镇。day_num 从 1 到 {days}。"
+                    "任务：沿途推荐。保留每天已有地点和顺序，沿环线方向顺路插入新景区（每天最多 1-2 个，过夜点之前）。不插排除景点。day_num 从 1 到 {days}。"
                 ),
             },
         )
@@ -555,17 +643,40 @@ pub async fn draft_itinerary(
             existing.to_string(),
             match focus_day {
                 Some(d) => format!(
-                    "【任务】在上一版基础上改第 {d} 天。按用户要求增删或调整；未提及的地点尽量保留。改完后当天仍须顺路、以镇/县过夜，并自检无重复地名与折返。只输出第 {d} 天。"
+                    "任务：纠偏/改第 {d} 天。用户要求的排除、方向、增删必须执行；若用户指出放射式绕行或重复路段，须重排为环线推进。仅未提及的尽量保留。只输出 day_num={d}。"
                 ),
                 None => format!(
-                    "【任务】在上一版基础上调整全部 {days} 天。按用户要求修改；未提及的可保留。改完后每天须顺路、以镇/县过夜，并自检无重复地名与折返。day_num 从 1 到 {days}。"
+                    "任务：纠偏/改全部 {days} 天。用户要求的排除、方向、增删必须执行；若用户指出放射式绕行或重复路段，须重排为环线推进。仅未提及的尽量保留。day_num 从 1 到 {days}。"
                 ),
             },
         )
     };
+    let day_dates = trip_day_dates(start, days);
+    let day_dates_line = if day_dates.is_empty() {
+        String::new()
+    } else {
+        format!("\n- 每日日期：{day_dates}")
+    };
     let user_content = format!(
-        "目的地：{destination}\n出行日期：{start} 至 {end}，共 {days} 天\n现有行程（按顺序）：{existing_line}\n{scope}\n用户要求：{prefer}\n{links}\
-请严格遵守系统规则（过夜、去重、顺路、跨天）。输出 JSON：{{\"summary\":\"\",\"days\":[{{\"day_num\":1,\"theme\":\"\",\"points\":[{{\"place_name\":\"\",\"query\":\"城市 地点\",\"point_type\":\"sight\",\"stay_minutes\":90,\"arrive\":\"09:00\",\"note\":\"\"}}]}}]}}"
+        "\
+## 行程参数（系统已定，以此为准）
+- 目的地/区域：{destination}
+- 出行日期：{start} 至 {end}（共 {days} 天）{day_dates_line}
+- 现有行程：{existing_line}
+- {scope}
+
+## 用户需求（只写景点、方向、排除、节奏等，不要写日期和天数）
+{prefer}{constraint}{links}
+
+## 规划要求
+1. 天数与日期以「行程参数」为准，勿采用用户口述的日期/天数
+2. 先确定环线方向（以用户指定为准），全程锁定
+3. 住宿点沿主线向前，用具体地名，禁止模糊词
+4. 排除景点不得出现
+5. 避免放射式绕行与连续重复路段
+6. 生成后在 summary 附路线健康度自检
+
+输出 JSON：{{\"summary\":\"含自检\",\"days\":[{{\"day_num\":1,\"theme\":\"逆时针·D1\",\"points\":[{{\"place_name\":\"\",\"query\":\"城市 地点\",\"point_type\":\"sight\",\"stay_minutes\":90,\"arrive\":\"09:00\",\"note\":\"\"}}]}}]}}"
     );
     let model = chat_json(api_key, user_content).await?;
     let mut draft = AiDraft {

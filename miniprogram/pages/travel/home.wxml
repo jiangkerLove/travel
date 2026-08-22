@@ -318,7 +318,7 @@
       <view class="ai-head">
         <view>
           <view class="ai-title">AI 排行程</view>
-          <view class="ai-sub" wx:if="{{trip.start_date}}">{{trip.start_date}} – {{trip.end_date}} · {{days.length}} 天</view>
+          <view class="ai-sub" wx:if="{{trip.start_date}}">已按旅途 {{trip.start_date}} – {{trip.end_date}} · {{days.length}} 天排程，不用在下方写日期</view>
         </view>
         <view class="ai-close" catch:tap="closeAi">收起</view>
       </view>
@@ -337,16 +337,16 @@
         >D{{item.day_num}}</view>
       </view>
       <view class="ai-body">
-        <view class="ai-hint" wx:if="{{aiPending && aiMode === 'recommend'}}">基于当前这版继续推荐。改提示词即可，比如想多看古镇、别太累。</view>
-        <view class="ai-hint" wx:elif="{{aiPending}}">基于当前这版继续改，不会推倒重来。写上要加、要去、不要去的即可。</view>
-        <view class="ai-hint" wx:elif="{{aiMode === 'recommend'}}">不改现在的走法，只在路线附近推荐景点。可以写偏好，也可以直接推荐。</view>
-        <view class="ai-hint" wx:elif="{{aiDayNum === 0}}">写要去哪或粘贴链接，会按你的描述全新排一版。</view>
-        <view class="ai-hint" wx:else>只改 D{{aiDayNum}}。写这天要去哪、加上或去掉什么。</view>
+        <view class="ai-hint" wx:if="{{aiPending && aiMode === 'recommend'}}">基于当前这版继续推荐。可写偏好，不必写日期。</view>
+        <view class="ai-hint" wx:elif="{{aiPending}}">基于当前这版继续改。写必去/不去、方向即可，日期仍按旅途。</view>
+        <view class="ai-hint" wx:elif="{{aiMode === 'recommend'}}">不改现有走法，只在附近顺路加景点。可不填，或写偏好。</view>
+        <view class="ai-hint" wx:elif="{{aiDayNum === 0}}">日期天数已自动带入。写：环线方向、必去/不去、节奏即可。</view>
+        <view class="ai-hint" wx:else>只改 D{{aiDayNum}}。写这天加什么、去掉什么，不用写日期。</view>
         <textarea
           class="ai-input"
           value="{{aiPrompt}}"
           maxlength="2000"
-          placeholder="{{aiMode === 'recommend' ? '例如：想多看古镇，或只要顺路、别太累（可不填）' : (aiDayNum === 0 ? '例如：去川西，要去四姑娘山和丹巴，不去新都桥' : '例如：这天加上洱海日落，去掉喜洲')}}"
+          placeholder="{{aiMode === 'recommend' ? '例：多推荐古镇和自然风光，别太累（可不填）' : (aiDayNum === 0 ? '例：逆时针环线，必去四姑娘山、丹巴，不去新都桥，休闲节奏' : '例：加上洱海日落，去掉喜洲')}}"
           placeholder-class="ai-ph"
           adjust-position="{{false}}"
           cursor-spacing="24"
