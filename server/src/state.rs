@@ -8,6 +8,7 @@ pub struct AppState {
     pub wechat_secret: String,
     pub amap_key: String,
     pub amap_secret: String,
+    pub deepseek_api_key: String,
     pub dev_mode: bool,
 }
 

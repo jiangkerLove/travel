@@ -829,3 +829,183 @@ pub async fn map_regeo(
     let poi = reverse_geocode(&state.amap_key, &state.amap_secret, q.lng, q.lat).await?;
     Ok(ok(poi))
 }
+
+#[derive(Deserialize)]
+pub struct AiDraftReq {
+    pub travel_id: i64,
+    pub prompt: String,
+    pub day_num: Option<i32>,
+}
+
+#[derive(Deserialize)]
+pub struct AiApplyReq {
+    pub travel_id: i64,
+    pub day_num: Option<i32>,
+    pub days: Vec<crate::ai::AiDay>,
+}
+
+fn existing_plan_brief(plans: &[PlanRow], focus_day: Option<i32>) -> String {
+    if plans.is_empty() {
+        return "暂无行程".into();
+    }
+    let mut by_day: Vec<(i32, Vec<String>)> = Vec::new();
+    for p in plans {
+        if let Some((_, names)) = by_day.iter_mut().find(|(d, _)| *d == p.day_num) {
+            names.push(p.place_name.clone());
+        } else {
+            by_day.push((p.day_num, vec![p.place_name.clone()]));
+        }
+    }
+    let all = by_day
+        .iter()
+        .map(|(d, names)| format!("D{d}: {}", names.join("、")))
+        .collect::<Vec<_>>()
+        .join("；");
+    if let Some(d) = focus_day {
+        let names = by_day
+            .into_iter()
+            .find(|(n, _)| *n == d)
+            .map(|(_, names)| names.join("、"))
+            .unwrap_or_else(|| "这一天还空着".into());
+        format!("全程：{all}\n正在改 D{d}，现有点：{names}")
+    } else {
+        all
+    }
+}
+
+pub async fn ai_draft(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Json(req): Json<AiDraftReq>,
+) -> Result<Json<ApiOk<crate::ai::AiDraft>>, AppError> {
+    require_editor(&state.pool, req.travel_id, user.id).await?;
+    let t = find_travel(&state.pool, req.travel_id).await?;
+    let days = day_count(t.start_date, t.end_date);
+    let focus_day = match req.day_num {
+        Some(d) if d >= 1 && d <= days => Some(d),
+        Some(_) => return Err(AppError::BadRequest("天数不在旅途范围内".into())),
+        None => None,
+    };
+    let plans = list_plans(&state.pool, req.travel_id, None).await?;
+    let draft = crate::ai::draft_itinerary(
+        &state.deepseek_api_key,
+        &state.amap_key,
+        &state.amap_secret,
+        &t.destination,
+        &t.start_date.to_string(),
+        &t.end_date.to_string(),
+        days,
+        &existing_plan_brief(&plans, focus_day),
+        &req.prompt,
+        focus_day,
+    )
+    .await?;
+    Ok(ok(draft))
+}
+
+pub async fn ai_apply(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Json(req): Json<AiApplyReq>,
+) -> Result<Json<ApiOk<serde_json::Value>>, AppError> {
+    require_editor(&state.pool, req.travel_id, user.id).await?;
+    let t = find_travel(&state.pool, req.travel_id).await?;
+    let max_days = day_count(t.start_date, t.end_date);
+    if req.days.is_empty() {
+        return Err(AppError::BadRequest("没有可保存的行程".into()));
+    }
+    let focus_day = match req.day_num {
+        Some(d) if d >= 1 && d <= max_days => Some(d),
+        Some(_) => return Err(AppError::BadRequest("天数不在旅途范围内".into())),
+        None => None,
+    };
+    let mut rows: Vec<(i32, crate::ai::AiPoint)> = Vec::new();
+    for day in &req.days {
+        if day.day_num < 1 || day.day_num > max_days {
+            return Err(AppError::BadRequest("天数不在旅途范围内".into()));
+        }
+        if focus_day.is_some() && focus_day != Some(day.day_num) {
+            continue;
+        }
+        for p in &day.points {
+            let name = p.place_name.trim();
+            if name.is_empty() {
+                continue;
+            }
+            if !valid_point_type(&p.point_type) {
+                return Err(AppError::BadRequest("点位类型不合法".into()));
+            }
+            rows.push((day.day_num, p.clone()));
+            if rows.len() > 40 {
+                return Err(AppError::BadRequest("地点太多，精简后再保存".into()));
+            }
+        }
+    }
+    if rows.is_empty() {
+        return Err(AppError::BadRequest("没有可保存的地点".into()));
+    }
+
+    let old_ids: Vec<i64> = if let Some(day) = focus_day {
+        sqlx::query_scalar("SELECT id FROM day_plan WHERE travel_id=$1 AND day_num=$2")
+            .bind(req.travel_id)
+            .bind(day)
+            .fetch_all(&state.pool)
+            .await?
+    } else {
+        sqlx::query_scalar("SELECT id FROM day_plan WHERE travel_id=$1")
+            .bind(req.travel_id)
+            .fetch_all(&state.pool)
+            .await?
+    };
+
+    let mut tx = state.pool.begin().await?;
+    if let Some(day) = focus_day {
+        sqlx::query("DELETE FROM day_plan WHERE travel_id=$1 AND day_num=$2")
+            .bind(req.travel_id)
+            .bind(day)
+            .execute(&mut *tx)
+            .await?;
+    } else {
+        sqlx::query("DELETE FROM day_plan WHERE travel_id=$1")
+            .bind(req.travel_id)
+            .execute(&mut *tx)
+            .await?;
+    }
+
+    let mut sort_by_day: std::collections::HashMap<i32, i32> = std::collections::HashMap::new();
+    for (day_num, p) in rows {
+        let sort = {
+            let n = sort_by_day.entry(day_num).or_insert(0);
+            let cur = *n;
+            *n += 1;
+            cur
+        };
+        let lng = p.longitude.and_then(Decimal::from_f64);
+        let lat = p.latitude.and_then(Decimal::from_f64);
+        let arrive = parse_time(&p.arrive)?;
+        let remark = p.note.as_deref().map(str::trim).filter(|s| !s.is_empty());
+        sqlx::query(
+            r#"
+            INSERT INTO day_plan (
+                travel_id, day_num, point_type, place_name, longitude, latitude,
+                arrive_time, leave_time, stay_duration, traffic_type, traffic_duration, sort, remark
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,NULL,$8,NULL,NULL,$9,$10)
+            "#,
+        )
+        .bind(req.travel_id)
+        .bind(day_num)
+        .bind(&p.point_type)
+        .bind(p.place_name.trim())
+        .bind(lng)
+        .bind(lat)
+        .bind(arrive)
+        .bind(p.stay_minutes)
+        .bind(sort)
+        .bind(remark)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+    invalidate_route_cache(&state.pool, &old_ids).await;
+    Ok(ok(serde_json::json!({ "ok": true })))
+}

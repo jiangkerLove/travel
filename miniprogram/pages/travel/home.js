@@ -36,6 +36,30 @@ function pickBrowseScope(days, trip) {
   return { mapScope: 'all', dayIndex: -1 }
 }
 
+function cloneDays(days) {
+  return JSON.parse(JSON.stringify(days || []))
+}
+
+function draftDayToPlans(day, travelId) {
+  return decoratePlans(
+    (day.points || []).map((p, i) => ({
+      id: -(day.day_num * 100 + i + 1),
+      travel_id: travelId,
+      day_num: day.day_num,
+      point_type: p.point_type,
+      place_name: p.place_name,
+      longitude: p.longitude,
+      latitude: p.latitude,
+      arrive_time: p.arrive || '',
+      stay_duration: p.stay_minutes,
+      remark: p.note || '',
+      sort: i,
+    })),
+    '',
+    false,
+  )
+}
+
 function decoratePlans(plans, startHint, showRoute) {
   const list = (plans || []).map((p) => ({
     ...p,
@@ -127,6 +151,14 @@ Page({
     isCreator: false,
     routesReady: false,
     generating: false,
+    aiOpen: false,
+    aiPrompt: '',
+    aiLoading: false,
+    aiApplying: false,
+    aiDraft: null,
+    aiMissCount: 0,
+    aiDayNum: 0,
+    aiPending: false,
   },
   onLoad(q) {
     const mode = q.mode === 'edit' ? 'edit' : 'browse'
@@ -240,6 +272,7 @@ Page({
       canBill,
       isCreator: Number(trip.creator_id) === Number(user.id),
     })
+    if (this.data.aiPending) return
     if (this.data.tab === 'plan' || this.data.mode === 'edit') await this.loadPlans()
     if (this.data.tab === 'bill') await this.loadBills()
     if (this.data.tab === 'member') await this.loadMembers()
@@ -510,6 +543,10 @@ Page({
     this.openPlanEdit({ day_num: dayNum })
   },
   openPlanEdit({ day_num, id, plan } = {}) {
+    if (this.data.aiPending) {
+      wx.showToast({ title: '先保存或取消 AI 预览', icon: 'none' })
+      return
+    }
     if (!this.data.canEdit) {
       wx.showToast({ title: '没有改行程权限', icon: 'none' })
       return
@@ -533,6 +570,10 @@ Page({
     })
   },
   quickAddEnd() {
+    if (this.data.aiPending) {
+      wx.showToast({ title: '先保存或取消 AI 预览', icon: 'none' })
+      return
+    }
     if (this.data.mode !== 'edit' || !this.data.canEdit) {
       wx.showToast({ title: '没有改行程权限', icon: 'none' })
       return
@@ -636,6 +677,7 @@ Page({
     }
   },
   onDragStart(e) {
+    if (this.data.aiPending) return
     if (this.data.mode !== 'edit' || !this.data.canEdit || this.data.mapScope === 'all') return
     const from = Number(e.currentTarget.dataset.index)
     this._drag = {
@@ -695,6 +737,10 @@ Page({
     }
   },
   async generateRoutes() {
+    if (this.data.aiPending) {
+      wx.showToast({ title: '先保存或取消 AI 预览', icon: 'none' })
+      return
+    }
     if (this.data.generating) return
     const hasAny = (this.data.days || []).some((d) => (d.plans || []).length)
     if (!hasAny) {
@@ -716,6 +762,10 @@ Page({
     }
   },
   async finishEdit() {
+    if (this.data.aiPending) {
+      wx.showToast({ title: '先保存或取消 AI 预览', icon: 'none' })
+      return
+    }
     if (this.data.generating) return
     const hasAny = (this.data.days || []).some((d) => (d.plans || []).length)
     this.setData({ generating: true })
@@ -733,6 +783,187 @@ Page({
       wx.showToast({ title: (e && e.message) || '保存失败', icon: 'none' })
     } finally {
       this.setData({ generating: false })
+      wx.hideLoading()
+    }
+  },
+  openAi() {
+    if (!this.data.canEdit) {
+      wx.showToast({ title: '没有改行程权限', icon: 'none' })
+      return
+    }
+    let aiDayNum = this.data.aiDayNum || 0
+    if (!this.data.aiPending && this.data.mapScope === 'day') {
+      aiDayNum = (this.data.currentDay && this.data.currentDay.day_num)
+        || ((this.data.days || [])[this.data.dayIndex] || {}).day_num
+        || 0
+    }
+    this.setData({ aiOpen: true, aiDayNum })
+  },
+  closeAi() {
+    if (this.data.aiLoading || this.data.aiApplying) return
+    this.setData({ aiOpen: false })
+  },
+  onAiPrompt(e) {
+    this.setData({ aiPrompt: e.detail.value })
+  },
+  setAiDay(e) {
+    const aiDayNum = Number(e.currentTarget.dataset.v) || 0
+    if (aiDayNum === this.data.aiDayNum) return
+    if (this.data.aiPending) this.restoreAiBackup()
+    this.setData({ aiDayNum, aiDraft: null, aiMissCount: 0 })
+  },
+  decorateAiDraft(draft) {
+    const days = (draft && draft.days) || []
+    let miss = 0
+    const mapped = days.map((d) => ({
+      ...d,
+      theme: d.theme || '',
+      points: (d.points || []).map((p) => {
+        if (!p.found) miss += 1
+        return {
+          ...p,
+          typeLabel: pointMeta(p.point_type).label,
+        }
+      }),
+    }))
+    return {
+      draft: { ...draft, days: mapped },
+      miss,
+    }
+  },
+  applyDraftPreview(draft, focusDay) {
+    if (!this._aiBackup) this._aiBackup = cloneDays(this.data.days)
+    const days = cloneDays(this._aiBackup)
+    if (!focusDay) {
+      days.forEach((d) => {
+        d.plans = []
+      })
+    }
+    const patch = focusDay
+      ? (draft.days || []).filter((d) => d.day_num === focusDay)
+      : (draft.days || [])
+    patch.forEach((d) => {
+      const idx = days.findIndex((x) => x.day_num === d.day_num)
+      if (idx < 0) return
+      days[idx] = {
+        ...days[idx],
+        plans: draftDayToPlans(d, this.data.id),
+      }
+    })
+    let dayIndex = this.data.dayIndex
+    if (focusDay) {
+      const idx = days.findIndex((d) => d.day_num === focusDay)
+      if (idx >= 0) dayIndex = idx
+    } else if (dayIndex < 0) {
+      dayIndex = 0
+    }
+    this._mapCache = null
+    this._mapDrawKey = ''
+    this.setData({
+      days,
+      mapScope: 'day',
+      dayIndex,
+      currentDay: days[dayIndex] || { plans: [] },
+      routesReady: false,
+      aiPending: true,
+    })
+    this.renderMap({ fit: true })
+  },
+  restoreAiBackup() {
+    const days = this._aiBackup ? cloneDays(this._aiBackup) : this.data.days
+    const dayIndex = Math.max(0, this.data.dayIndex)
+    this._aiBackup = null
+    this._mapCache = null
+    this._mapDrawKey = ''
+    this.setData({
+      days,
+      currentDay: days[dayIndex] || { plans: [] },
+      aiDraft: null,
+      aiMissCount: 0,
+      aiPending: false,
+      routesReady: false,
+    })
+    this.renderMap({ fit: true })
+  },
+  cancelAi() {
+    if (this.data.aiLoading || this.data.aiApplying) return
+    this.restoreAiBackup()
+    this.setData({ aiOpen: false })
+  },
+  async runAiDraft() {
+    if (this.data.aiLoading || this.data.aiApplying) return
+    const prompt = (this.data.aiPrompt || '').trim()
+    if (prompt.length < 2) {
+      wx.showToast({ title: this.data.aiDayNum ? '写一下这天要加什么、去哪' : '写一下要去哪，或粘贴链接', icon: 'none' })
+      return
+    }
+    const dayNum = this.data.aiDayNum || 0
+    this.setData({ aiLoading: true })
+    wx.showLoading({ title: dayNum ? `正在排 D${dayNum}` : '正在排行程', mask: true })
+    try {
+      const raw = await api.planAiDraft({
+        travel_id: this.data.id,
+        prompt,
+        day_num: dayNum || null,
+      })
+      const { draft, miss } = this.decorateAiDraft(raw)
+      this.setData({ aiDraft: draft, aiMissCount: miss })
+      this.applyDraftPreview(draft, dayNum || null)
+    } catch (e) {
+      wx.showToast({ title: (e && e.message) || '生成失败', icon: 'none' })
+    } finally {
+      this.setData({ aiLoading: false })
+      wx.hideLoading()
+    }
+  },
+  async applyAiDraft() {
+    if (this.data.aiLoading || this.data.aiApplying) return
+    const draft = this.data.aiDraft
+    if (!draft || !(draft.days || []).length) return
+    const focusDay = this.data.aiDayNum || 0
+    const backup = this._aiBackup || this.data.days
+    const targetHasPlans = focusDay
+      ? ((backup || []).find((d) => d.day_num === focusDay) || {}).plans
+      : (backup || []).some((d) => (d.plans || []).length)
+    const hasAny = focusDay ? !!(targetHasPlans && targetHasPlans.length) : !!targetHasPlans
+    if (hasAny) {
+      const ok = await new Promise((resolve) => {
+        wx.showModal({
+          title: focusDay ? `改写 D${focusDay}？` : '替换当前行程？',
+          content: focusDay
+            ? `只改第 ${focusDay} 天，其他天不动。已记账单会保留。`
+            : '会用这一版覆盖现有地点。已记账单会保留，只是不再挂靠地点。',
+          confirmText: '保存',
+          cancelText: '再看看',
+          success: (r) => resolve(r.confirm),
+        })
+      })
+      if (!ok) return
+    }
+    this.setData({ aiApplying: true })
+    wx.showLoading({ title: '保存中', mask: true })
+    try {
+      await api.planAiApply({
+        travel_id: this.data.id,
+        day_num: focusDay || null,
+        days: draft.days,
+      })
+      this._aiBackup = null
+      this.setData({
+        aiOpen: false,
+        aiDraft: null,
+        aiMissCount: 0,
+        aiPending: false,
+        routesReady: false,
+      })
+      this._mapCache = null
+      this._mapDrawKey = ''
+      await this.loadPlans({ withRoutes: false })
+      wx.showToast({ title: '已写入行程', icon: 'success' })
+    } catch (e) {
+      wx.showToast({ title: (e && e.message) || '保存失败', icon: 'none' })
+    } finally {
+      this.setData({ aiApplying: false })
       wx.hideLoading()
     }
   },
@@ -1112,6 +1343,8 @@ Page({
     if (this.data.canEdit) {
       items.push('排行程')
       actions.push('plan')
+      items.push('AI 排行程')
+      actions.push('ai')
     }
     if (trip.role === 1) {
       items.push('修改旅途')
@@ -1128,7 +1361,10 @@ Page({
         const action = actions[r.tapIndex]
         setTimeout(() => {
           if (action === 'plan') this.enterEdit()
-          else if (action === 'edit') this.goEditTravel()
+          else if (action === 'ai') {
+            this.enterEdit()
+            this.openAi()
+          } else if (action === 'edit') this.goEditTravel()
           else if (action === 'archive') this.archive()
         }, 50)
       },

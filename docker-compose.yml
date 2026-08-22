@@ -22,6 +22,7 @@ services:
       WECHAT_SECRET: ${WECHAT_SECRET:-}
       AMAP_KEY: ${AMAP_KEY:-}
       AMAP_SECRET: ${AMAP_SECRET:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       PORT: "3000"
       DEV_MODE: ${DEV_MODE:-0}
       RUST_LOG: ${RUST_LOG:-server=info,sqlx=warn,tower_http=info}

@@ -4,14 +4,14 @@ function errMessage(res) {
   return (res && res.data && res.data.message) || '请求失败'
 }
 
-function request({ url, method = 'GET', data, skipAuth = false, quiet = false }, retried = false) {
+function request({ url, method = 'GET', data, skipAuth = false, quiet = false, timeout = 20000 }, retried = false) {
   const token = skipAuth ? '' : wx.getStorageSync('token')
   return new Promise((resolve, reject) => {
     wx.request({
       url: baseUrl + url,
       method,
       data,
-      timeout: 20000,
+      timeout,
       header: {
         'content-type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -22,7 +22,7 @@ function request({ url, method = 'GET', data, skipAuth = false, quiet = false },
           const app = getApp()
           if (app && app.silentLogin) {
             app.silentLogin(true)
-              .then(() => request({ url, method, data, skipAuth, quiet }, true))
+              .then(() => request({ url, method, data, skipAuth, quiet, timeout }, true))
               .then(resolve)
               .catch(reject)
             return
