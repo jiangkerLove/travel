@@ -70,6 +70,7 @@ struct ModelSelfCheck {
     hotel_specific: Option<bool>,
     no_repeated_segment: Option<bool>,
     no_radial_pattern: Option<bool>,
+    waypoint_has_note: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -107,6 +108,8 @@ fn map_point_type(raw: &str) -> String {
         "food"
     } else if s.contains("gas") || raw.contains("加油") {
         "gas"
+    } else if s.contains("waypoint") || raw.contains("途经") {
+        "waypoint"
     } else if s.contains("transport") || s.contains("station") || raw.contains("车站") || raw.contains("机场")
     {
         "transport"
@@ -215,6 +218,12 @@ place_name 必须是具体镇/县/片区地名，如「乐山市区」「九寨�
 住宿须沿主线方向前移；禁止连续两天住同一地却往相反方向跑远（基地模式）。
 例外：同一城市连住多日时，每天游览不同片区，且不重复昨日已走的主路段。
 
+【2.5 途经点（waypoint）规则】
+允许在 points 中插入 point_type=waypoint 的途经点，用于避开烂路、修路路段、拥堵区域、检查站等。
+途经点不是景点，不安排游览时间（stay_minutes=0），仅作为路线经过标记。
+每个途经点必须在 note 中注明原因，格式如「绕行G318修路段」「避开S217塌方段」「绕开康定城区拥堵」。
+途经点不计入景点数量，但计入每日点位数。
+
 【3. 折返管控】
 允许当日短线支线折返（如进峡谷景区后原路返回主线），但须当日完成、不跨日。
 折返路段在 points 中须有标识："is_return": true（起点和终点两个点都标）。
@@ -235,7 +244,8 @@ place_name 必须是具体镇/县/片区地名，如「乐山市区」「九寨�
     "excluded_omitted": true,
     "hotel_specific": true,
     "no_repeated_segment": true,
-    "no_radial_pattern": true
+    "no_radial_pattern": true,
+    "waypoint_has_note": true
   },
   "days": [
     {
@@ -273,37 +283,75 @@ place_name 必须是具体镇/县/片区地名，如「乐山市区」「九寨�
           "is_return": false
         }
       ]
+    },
+    {
+      "day_num": 2,
+      "theme": "逆时针·D2",
+      "points": [
+        {
+          "place_name": "乌兰浩特市区",
+          "query": "乌兰浩特 出发",
+          "location": "内蒙古兴安盟乌兰浩特市",
+          "point_type": "transport",
+          "stay_minutes": 0,
+          "arrive": "08:00",
+          "note": "出发，沿G302前往阿尔山",
+          "is_return": false
+        },
+        {
+          "place_name": "索伦镇绕行",
+          "query": "索伦镇 G302",
+          "location": "内蒙古兴安盟科尔沁右翼前旗索伦镇",
+          "point_type": "waypoint",
+          "stay_minutes": 0,
+          "arrive": "10:30",
+          "note": "途经点：绕过G302索伦段修路，改行X914乡道",
+          "is_return": false
+        },
+        {
+          "place_name": "阿尔山市区",
+          "query": "阿尔山 住宿",
+          "location": "内蒙古兴安盟阿尔山市",
+          "point_type": "hotel",
+          "stay_minutes": 0,
+          "arrive": "16:00",
+          "note": "入住",
+          "is_return": false
+        }
+      ]
     }
   ]
 }
 
 【6. 字段说明】
 summary：一句话概括全程（不含自检，自检另放）。
-self_check：5项布尔值自检结果，逐项核对：
+self_check：6项布尔值自检结果，逐项核对：
   - direction_consistent：方向是否全程一致
   - excluded_omitted：是否不含排除景点
   - hotel_specific：每晚住宿是否具体地名
   - no_repeated_segment：是否无连续两天重复路段
   - no_radial_pattern：是否非放射式绕行
+  - waypoint_has_note：所有 waypoint 是否都有 note 备注绕行原因
 days：数组，每项对应一天。
 day_num：第几天，从1开始。
 theme：当天主题，须含环线方向，如「逆时针·D2」。
 points：当天地点列表，按游览顺序排列，每天3-6个（含过夜点）。
-place_name：具体景区/地标/镇村，不写单独地级市名。
+place_name：具体景区/地标/镇村/途经点名称，不写单独地级市名。
 query：「城市 具体地点」，作备用检索。
 location：该地点的完整地址描述（省+市+区+具体名称），用于后端调用高德地理编码API反查坐标。
 示例：「内蒙古兴安盟乌兰浩特市成吉思汗庙」「四川省阿坝州九寨沟县九寨沟景区入口」
-point_type：sight / hotel / food / gas / transport 五选一。
-stay_minutes：停留分钟数，整数。
+point_type：sight / hotel / food / gas / transport / waypoint 六选一。
+  - waypoint：途经点，仅用于绕行避障（烂路/修路/拥堵），不是景点，stay_minutes必须为0。
+stay_minutes：停留分钟数，整数。景点填写实际游览时间；途经点/交通点为0。
 arrive：到达时间 HH:MM，随游览顺序递增。
-note：一句实用提醒（门票/预约/路况/午餐点），无则空字符串。
+note：景点填实用提醒（门票/预约/路况/午餐点）；途经点必填绕行原因。
 is_return：标识该点是否为折返路段端点，true/false。
 
 【7. 去重】
 同一地点当天只出现一次。禁止相邻两个相同地名。古镇与同名镇算一地。
 
 【8. 生成后自检】
-生成完整路线后，必须逐项核对 self_check 中5项指标，如实填写 true/false。
+生成完整路线后，必须逐项核对 self_check 中6项指标，如实填写 true/false。
 有任何一项为 false，须在 points 中重新调整后再输出最终版本。"#;
 
 /// 根据旅途开始日期列出 D1、D2… 对应公历
@@ -691,6 +739,7 @@ pub async fn draft_itinerary(
             (!check.hotel_specific.unwrap_or(true), "住宿"),
             (!check.no_repeated_segment.unwrap_or(true), "重复路段"),
             (!check.no_radial_pattern.unwrap_or(true), "放射绕行"),
+            (!check.waypoint_has_note.unwrap_or(true), "途经备注"),
         ]
         .into_iter()
         .filter_map(|(bad, label)| bad.then_some(label))

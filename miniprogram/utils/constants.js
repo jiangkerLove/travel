@@ -4,6 +4,7 @@ const POINT_TYPES = [
   { value: 'food', label: '餐饮', color: '#E37318' },
   { value: 'gas', label: '加油点', color: '#008858' },
   { value: 'transport', label: '交通', color: '#5E5E5E' },
+  { value: 'waypoint', label: '途经', color: '#9CA3AF' },
 ]
 
 const TRAFFIC_TYPES = [
