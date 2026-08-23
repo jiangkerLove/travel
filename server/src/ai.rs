@@ -73,11 +73,13 @@ struct ModelSelfCheck {
     no_radial_pattern: Option<bool>,
     waypoint_has_note: Option<bool>,
     return_segment_marked: Option<bool>,
+    stay_minutes_not_null: Option<bool>,
 }
 
 #[derive(Deserialize)]
 struct ModelOut {
     summary: Option<String>,
+    route_direction: Option<String>,
     self_check: Option<ModelSelfCheck>,
     days: Option<Vec<ModelDay>>,
 }
@@ -99,6 +101,13 @@ struct ModelPoint {
     arrive: Option<String>,
     note: Option<String>,
     is_return: Option<bool>,
+}
+
+fn normalize_stay_minutes(point_type: &str, raw: Option<i32>) -> Option<i32> {
+    match point_type {
+        "transport" | "hotel" | "food" | "gas" | "waypoint" => Some(0),
+        _ => raw.filter(|n| *n > 0 && *n < 24 * 60),
+    }
 }
 
 fn map_point_type(raw: &str) -> String {
@@ -199,162 +208,153 @@ const SYSTEM_PROMPT: &str = r#"你是旅游环线规划引擎，专精中国自�
 
 【0. 数据源优先级】
 唯一数据源 = 用户本次输入。用户输入中的天数、日期、景点、方向为最终依据。
-如果用户输入中缺少某字段（如无方向偏好），则由AI按地理合理性自动补全。
+如果用户输入中未指定方向，则由AI按路线合理性自动选择最优方向（顺时针或逆时针），并在 route_direction 字段中标注。
 不存在"系统参数"这一外部数据源。
 
 【1. 环线方向锁定】
-先确定主线方向（顺时针或逆时针，以用户指定为准），全程保持一致。
-每日 theme 开头标注方向，格式如「逆时针·D2」或「顺时针·D3」。
-禁止放射式绕行：反例「宜宾→乐山→自贡→眉山→又回到宜宾另一侧景点」；
-正例：沿环边界单向前进，每天住宿点沿主线推进，最终闭合回出发方向。
+全程主线方向处理规则：
+- 用户指定「顺时针」或「逆时针」时，必须严格执行，不得反向。
+- 用户未指定方向时，AI按以下标准自动选择最优方向：
+  1. 优先选择住宿点沿主线单向推进、无放射式绕行的方向
+  2. 优先选择每日车程更均衡、景点衔接更顺畅的方向
+  3. 优先选择能避开修路/拥堵路段的方向（如途经点可绕行）
+  4. 如两个方向均合理，优先选择顺时针
 
-用户未指定方向时，按以下规则自动判定：
-- 若起点经度 < 终点经度（起点偏西），选顺时针
-- 若起点经度 > 终点经度（起点偏东），选逆时针
-- 若起点=终点，先向北再向南为逆时针，先向南再向北为顺时针
+【川西环线方向示例】
+顺时针：成都→康定（右下）→新都桥（左下）→丹巴（左）→四姑娘山（左上）→成都
+逆时针：成都→四姑娘山（左上）→丹巴（左）→新都桥（左下）→康定（右下）→成都
+
+【方向检查】生成路线后，检查每天住宿点的顺序是否沿主线单向推进，无反向绕行。
 
 【2. 住宿向前推进】
 每天 points 数组中，最后一个元素必须是 point_type=hotel。
-place_name 必须是具体镇/县/片区地名，如「乐山市区」「九寨沟沟口」「日隆镇」。
+place_name 必须是具体镇/县/片区地名，如「新都桥镇」「日隆镇」。
 禁止「途中休息」「路上」「附近」等模糊词。
 住宿须沿主线方向前移；禁止连续两天住同一地却往相反方向跑远（基地模式）。
 例外：同一城市连住多日时，每天游览不同片区，且不重复昨日已走的主路段。
+连住时，每天最后一个hotel的 note 中必须注明「连住第X晚」。
 
-【2.5 途经点（waypoint）规则】
-允许在 points 中插入 point_type=waypoint 的途经点，用于避开烂路、修路路段、拥堵区域、检查站等。
-途经点不是景点，不安排游览时间（stay_minutes=0），仅作为路线经过标记。
-每个途经点必须在 note 中注明原因，格式如「绕行G318修路段」「避开S217塌方段」「绕开康定城区拥堵」。
-途经点不计入景点数量，但计入每日点位数。
+最后一天到达终点后不再住宿，最后一个点可为 transport，但须在 note 中注明「行程结束」。
+
+【2.5 途经点规则】
+允许在 points 中插入 point_type=waypoint 的途经点，用于避开烂路、修路路段、拥堵区域。
+途经点不是景点，stay_minutes=0，每个途经点必须在 note 中注明原因。
 
 【3. 折返管控】
-允许当日短线支线折返（如进峡谷景区后原路返回主线），但须当日完成、不跨日。
-折返路段在 points 中须有标识："is_return": true（起点和终点两个点都标）。
-禁止连续两天及以上重复同一段折返路。
-默认每日纯驾车约不超过4小时（用户另有说明从其要求）。
+允许当日短线支线折返，但须当日完成、不跨日。
+折返路段必须标注：折返起点和终点都标 is_return:true。
+如果当天最后一个 hotel 与当天第一个 transport 的出发地相同，视为单日折返，必须标 is_return:true。
+禁止连续两天重复同一段折返路。
 
 【4. 排除过滤】
-用户标注不去的景点，任何情况下不得出现在 place_name、query、note 中，
-也不得安排为途经点。
+用户标注不去的景点，任何情况下不得出现在路线中。
 
 【5. 输出格式】
 只输出一个 JSON 对象，不要 markdown 代码块，不要正文解释。结构如下：
 
 {
-  "summary": "全程逆时针环线，12天，长春出发经阿尔山、满洲里、根河返回长春。",
+  "summary": "全程顺时针环线，6天，成都出发经康定、新都桥、丹巴、四姑娘山返回成都。",
+  "route_direction": "顺时针",
   "self_check": {
     "direction_consistent": true,
     "excluded_omitted": true,
     "hotel_specific": true,
     "no_repeated_segment": true,
     "no_radial_pattern": true,
-    "waypoint_has_note": true
+    "waypoint_has_note": true,
+    "return_segment_marked": true,
+    "stay_minutes_not_null": true
   },
   "days": [
     {
       "day_num": 1,
-      "theme": "逆时针·D1",
+      "theme": "成都→康定",
       "points": [
-        {
-          "place_name": "长春市区",
-          "query": "长春 出发",
-          "location": "吉林省长春市",
-          "point_type": "transport",
-          "stay_minutes": 0,
-          "arrive": "08:00",
-          "note": "出发",
-          "is_return": false
-        },
-        {
-          "place_name": "成吉思汗庙",
-          "query": "乌兰浩特 成吉思汗庙",
-          "location": "内蒙古兴安盟乌兰浩特市成吉思汗庙",
-          "point_type": "sight",
-          "stay_minutes": 90,
-          "arrive": "13:30",
-          "note": "停车方便，门票30元",
-          "is_return": false
-        },
-        {
-          "place_name": "乌兰浩特市区",
-          "query": "乌兰浩特 住宿",
-          "location": "内蒙古兴安盟乌兰浩特市",
-          "point_type": "hotel",
-          "stay_minutes": 0,
-          "arrive": "17:00",
-          "note": "入住，次日前往阿尔山",
-          "is_return": false
-        }
+        {"place_name": "成都市区", "query": "成都 出发", "location": "四川省成都市", "point_type": "transport", "stay_minutes": 0, "arrive": "08:00", "note": "出发", "is_return": false},
+        {"place_name": "泸定桥", "query": "泸定 泸定桥", "location": "四川省甘孜州泸定县泸定桥", "point_type": "sight", "stay_minutes": 60, "arrive": "10:00", "note": "门票10元", "is_return": false},
+        {"place_name": "康定市区", "query": "康定 住宿", "location": "四川省甘孜州康定市", "point_type": "hotel", "stay_minutes": 0, "arrive": "17:00", "note": "入住", "is_return": false}
       ]
     },
     {
       "day_num": 2,
-      "theme": "逆时针·D2",
+      "theme": "康定→新都桥",
       "points": [
-        {
-          "place_name": "乌兰浩特市区",
-          "query": "乌兰浩特 出发",
-          "location": "内蒙古兴安盟乌兰浩特市",
-          "point_type": "transport",
-          "stay_minutes": 0,
-          "arrive": "08:00",
-          "note": "出发，沿G302前往阿尔山",
-          "is_return": false
-        },
-        {
-          "place_name": "索伦镇绕行",
-          "query": "索伦镇 G302",
-          "location": "内蒙古兴安盟科尔沁右翼前旗索伦镇",
-          "point_type": "waypoint",
-          "stay_minutes": 0,
-          "arrive": "10:30",
-          "note": "途经点：绕过G302索伦段修路，改行X914乡道",
-          "is_return": false
-        },
-        {
-          "place_name": "阿尔山市区",
-          "query": "阿尔山 住宿",
-          "location": "内蒙古兴安盟阿尔山市",
-          "point_type": "hotel",
-          "stay_minutes": 0,
-          "arrive": "16:00",
-          "note": "入住",
-          "is_return": false
-        }
+        {"place_name": "康定市区", "query": "康定 出发", "location": "四川省甘孜州康定市", "point_type": "transport", "stay_minutes": 0, "arrive": "08:00", "note": "出发，翻折多山", "is_return": false},
+        {"place_name": "折多山垭口", "query": "折多山 观景台", "location": "四川省甘孜州康定市折多山垭口", "point_type": "sight", "stay_minutes": 30, "arrive": "09:30", "note": "免费，海拔4298米", "is_return": false},
+        {"place_name": "新都桥镇", "query": "新都桥 住宿", "location": "四川省甘孜州康定市新都桥镇", "point_type": "hotel", "stay_minutes": 0, "arrive": "12:00", "note": "入住", "is_return": false}
+      ]
+    },
+    {
+      "day_num": 3,
+      "theme": "新都桥休整",
+      "points": [
+        {"place_name": "新都桥镇", "query": "新都桥 出发", "location": "四川省甘孜州康定市新都桥镇", "point_type": "transport", "stay_minutes": 0, "arrive": "08:00", "note": "出发前往鱼子西", "is_return": true},
+        {"place_name": "鱼子西", "query": "鱼子西 观景台", "location": "四川省甘孜州康定市鱼子西观景台", "point_type": "sight", "stay_minutes": 120, "arrive": "09:00", "note": "免费，360度雪山观景台", "is_return": false},
+        {"place_name": "新都桥镇", "query": "新都桥 住宿", "location": "四川省甘孜州康定市新都桥镇", "point_type": "hotel", "stay_minutes": 0, "arrive": "12:00", "note": "连住第2晚，返回新都桥是折返段终点", "is_return": true}
+      ]
+    },
+    {
+      "day_num": 4,
+      "theme": "新都桥→丹巴",
+      "points": [
+        {"place_name": "新都桥镇", "query": "新都桥 出发", "location": "四川省甘孜州康定市新都桥镇", "point_type": "transport", "stay_minutes": 0, "arrive": "08:00", "note": "出发，沿G248前往丹巴", "is_return": false},
+        {"place_name": "塔公草原", "query": "塔公草原 寺庙", "location": "四川省甘孜州康定市塔公镇塔公草原", "point_type": "sight", "stay_minutes": 60, "arrive": "09:30", "note": "免费，远眺雅拉雪山", "is_return": false},
+        {"place_name": "墨石公园", "query": "八美 墨石公园", "location": "四川省甘孜州道孚县八美镇墨石公园", "point_type": "sight", "stay_minutes": 120, "arrive": "11:00", "note": "门票60元", "is_return": false},
+        {"place_name": "丹巴县城", "query": "丹巴 住宿", "location": "四川省甘孜州丹巴县", "point_type": "hotel", "stay_minutes": 0, "arrive": "17:00", "note": "入住", "is_return": false}
+      ]
+    },
+    {
+      "day_num": 5,
+      "theme": "丹巴→四姑娘山",
+      "points": [
+        {"place_name": "丹巴县城", "query": "丹巴 出发", "location": "四川省甘孜州丹巴县", "point_type": "transport", "stay_minutes": 0, "arrive": "08:00", "note": "出发，沿G350前往四姑娘山", "is_return": false},
+        {"place_name": "甲居藏寨", "query": "丹巴 甲居藏寨", "location": "四川省甘孜州丹巴县甲居藏寨", "point_type": "sight", "stay_minutes": 120, "arrive": "08:30", "note": "门票50元", "is_return": false},
+        {"place_name": "日隆镇", "query": "四姑娘山 日隆镇", "location": "四川省阿坝州小金县日隆镇", "point_type": "hotel", "stay_minutes": 0, "arrive": "17:00", "note": "入住", "is_return": false}
+      ]
+    },
+    {
+      "day_num": 6,
+      "theme": "四姑娘山→成都",
+      "points": [
+        {"place_name": "日隆镇", "query": "日隆镇 出发", "location": "四川省阿坝州小金县日隆镇", "point_type": "transport", "stay_minutes": 0, "arrive": "08:00", "note": "出发", "is_return": false},
+        {"place_name": "四姑娘山双桥沟", "query": "四姑娘山 双桥沟", "location": "四川省阿坝州小金县四姑娘山双桥沟", "point_type": "sight", "stay_minutes": 240, "arrive": "08:30", "note": "门票+观光车150元", "is_return": false},
+        {"place_name": "成都市区", "query": "成都 到达", "location": "四川省成都市", "point_type": "transport", "stay_minutes": 0, "arrive": "17:00", "note": "行程结束", "is_return": false}
       ]
     }
   ]
 }
 
 【6. 字段说明】
-summary：一句话概括全程（不含自检，自检另放）。
-self_check：6项布尔值自检结果，逐项核对：
+summary：一句话概括全程（不含自检）。
+route_direction：全程主线方向，固定为「顺时针」或「逆时针」，全局唯一。
+self_check：8项布尔值自检结果：
   - direction_consistent：方向是否全程一致
   - excluded_omitted：是否不含排除景点
   - hotel_specific：每晚住宿是否具体地名
   - no_repeated_segment：是否无连续两天重复路段
   - no_radial_pattern：是否非放射式绕行
-  - waypoint_has_note：所有 waypoint 是否都有 note 备注绕行原因
+  - waypoint_has_note：所有 waypoint 是否都有 note
+  - return_segment_marked：所有折返段起止点是否都标了 is_return:true
+  - stay_minutes_not_null：所有点的 stay_minutes 是否都不为 null
 days：数组，每项对应一天。
 day_num：第几天，从1开始。
-theme：当天主题，须含环线方向，如「逆时针·D2」。
-points：当天地点列表，按游览顺序排列，每天3-6个（含过夜点）。
-place_name：具体景区/地标/镇村/途经点名称，不写单独地级市名。
+theme：当天行程主题，格式为「出发地→目的地」，不含方向（方向由 route_direction 统一标识）。
+points：当天地点列表，按顺序排列，每天3-6个（含过夜点）。
+place_name：具体景区/地标/镇村/途经点名称。
 query：「城市 具体地点」，作备用检索。
-location：该地点的完整地址描述（省+市+区+具体名称），用于后端调用高德地理编码API反查坐标。
-示例：「内蒙古兴安盟乌兰浩特市成吉思汗庙」「四川省阿坝州九寨沟县九寨沟景区入口」
+location：完整地址描述（省+市+区+具体名称），用于高德反查坐标。
 point_type：sight / hotel / food / gas / transport / waypoint 六选一。
-  - waypoint：途经点，仅用于绕行避障（烂路/修路/拥堵），不是景点，stay_minutes必须为0。
-stay_minutes：停留分钟数，整数。景点填写实际游览时间；途经点/交通点为0。
-arrive：到达时间 HH:MM，随游览顺序递增。
-note：景点填实用提醒（门票/预约/路况/午餐点）；途经点必填绕行原因。
-is_return：标识该点是否为折返路段端点，true/false。
+stay_minutes：停留分钟数。❗景点填写实际游览分钟数；其他类型必须填 0，禁止填 null。
+arrive：到达时间 HH:MM。
+note：实用提醒；途经点必填绕行原因；连住hotel必须注明「连住第X晚」。
+is_return：是否为折返段端点，true/false。
 
 【7. 去重】
-同一地点当天只出现一次。禁止相邻两个相同地名。古镇与同名镇算一地。
+同一地点当天只出现一次。禁止相邻两个相同地名。
 
 【8. 生成后自检】
-生成完整路线后，必须逐项核对 self_check 中6项指标，如实填写 true/false。
-有任何一项为 false，须在 points 中重新调整后再输出最终版本。"#;
+生成后逐项核对 self_check 中8项指标，如实填写 true/false。
+有任何一项为 false，重新调整后输出。"#;
 
 /// 根据旅途开始日期列出 D1、D2… 对应公历
 fn trip_day_dates(start: &str, days: i32) -> String {
@@ -762,6 +762,7 @@ pub async fn draft_itinerary(
                 (!check.no_radial_pattern.unwrap_or(true), "放射绕行"),
                 (!check.waypoint_has_note.unwrap_or(true), "途经备注"),
                 (!check.return_segment_marked.unwrap_or(true), "折返标注"),
+                (!check.stay_minutes_not_null.unwrap_or(true), "停留时长"),
             ]
             .into_iter()
             .filter_map(|(bad, label)| bad.then_some(label))
@@ -785,12 +786,13 @@ pub async fn draft_itinerary(
                 if name.is_empty() {
                     continue;
                 }
+                let point_type = map_point_type(&p.point_type.unwrap_or_default());
                 points.push(AiPoint {
                     place_name: name.clone(),
                     query: p.query.unwrap_or_default(),
                     location: p.location.filter(|s| !s.trim().is_empty()),
-                    point_type: map_point_type(&p.point_type.unwrap_or_default()),
-                    stay_minutes: p.stay_minutes.filter(|n| *n > 0 && *n < 24 * 60),
+                    point_type: point_type.clone(),
+                    stay_minutes: normalize_stay_minutes(&point_type, p.stay_minutes),
                     arrive: p.arrive.filter(|s| s.len() >= 4 && s.len() <= 8),
                     note: p.note.filter(|s| !s.trim().is_empty()),
                     is_return: p.is_return,
