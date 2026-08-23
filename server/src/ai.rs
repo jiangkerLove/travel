@@ -72,6 +72,7 @@ struct ModelSelfCheck {
     no_repeated_segment: Option<bool>,
     no_radial_pattern: Option<bool>,
     waypoint_has_note: Option<bool>,
+    return_segment_marked: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -760,6 +761,7 @@ pub async fn draft_itinerary(
                 (!check.no_repeated_segment.unwrap_or(true), "重复路段"),
                 (!check.no_radial_pattern.unwrap_or(true), "放射绕行"),
                 (!check.waypoint_has_note.unwrap_or(true), "途经备注"),
+                (!check.return_segment_marked.unwrap_or(true), "折返标注"),
             ]
             .into_iter()
             .filter_map(|(bad, label)| bad.then_some(label))
