@@ -7,6 +7,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    ai_log::{list_ai_plan_logs, AiDraftLogCtx},
     db::{
         clear_travel_route_cache, find_travel, invalidate_route_cache, list_plans, load_route_cache,
         require_editor, require_member, save_route_cache, PlanRow,
@@ -940,6 +941,15 @@ pub async fn ai_draft(
     if recommend && plans.is_empty() {
         return Err(AppError::BadRequest("先排几个地点，再沿途推荐".into()));
     }
+    let log_ctx = AiDraftLogCtx {
+        pool: &state.pool,
+        travel_id: req.travel_id,
+        user_id: user.id,
+        mode: if recommend { "recommend" } else { "plan" },
+        fresh,
+        day_num: focus_day,
+        user_prompt: req.prompt.clone(),
+    };
     let draft = crate::ai::draft_itinerary(
         &state.deepseek_api_key,
         &state.amap_key,
@@ -953,9 +963,27 @@ pub async fn ai_draft(
         focus_day,
         recommend,
         fresh,
+        Some(&log_ctx),
     )
     .await?;
     Ok(ok(draft))
+}
+
+#[derive(Deserialize)]
+pub struct AiLogQuery {
+    pub travel_id: i64,
+    pub limit: Option<i64>,
+}
+
+pub async fn ai_logs(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Query(q): Query<AiLogQuery>,
+) -> Result<Json<ApiOk<Vec<crate::ai_log::AiPlanLogVo>>>, AppError> {
+    require_editor(&state.pool, q.travel_id, user.id).await?;
+    let limit = q.limit.unwrap_or(20).clamp(1, 50);
+    let rows = list_ai_plan_logs(&state.pool, q.travel_id, limit).await?;
+    Ok(ok(rows))
 }
 
 pub async fn ai_apply(

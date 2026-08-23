@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::{
+    ai_log::{insert_ai_plan_log, AiDraftLogCtx, AiPlanLogInsert},
     error::AppError,
     poi::{geocode_address, pick_best_poi, search_places, PoiVo},
     util::{parse_date, valid_point_type},
@@ -536,15 +537,8 @@ fn parse_model_json(raw: &str) -> Result<ModelOut, AppError> {
     serde_json::from_str(json_str).map_err(|_| AppError::Internal("模型返回格式不对".into()))
 }
 
-async fn chat_json(api_key: &str, user_content: String) -> Result<ModelOut, AppError> {
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        AUTHORIZATION,
-        HeaderValue::from_str(&format!("Bearer {api_key}"))
-            .map_err(|_| AppError::Internal("DeepSeek Key 不合法".into()))?,
-    );
-    headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-    let body = json!({
+fn build_deepseek_request(user_content: &str) -> Value {
+    json!({
         "model": DEEPSEEK_MODEL,
         "temperature": 0.5,
         "thinking": { "type": "disabled" },
@@ -556,7 +550,22 @@ async fn chat_json(api_key: &str, user_content: String) -> Result<ModelOut, AppE
             },
             { "role": "user", "content": user_content }
         ]
-    });
+    })
+}
+
+struct ChatJsonResult {
+    model: ModelOut,
+    raw_content: String,
+}
+
+async fn chat_json(api_key: &str, request_body: &Value) -> Result<ChatJsonResult, AppError> {
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        AUTHORIZATION,
+        HeaderValue::from_str(&format!("Bearer {api_key}"))
+            .map_err(|_| AppError::Internal("DeepSeek Key 不合法".into()))?,
+    );
+    headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(40))
         .build()
@@ -564,7 +573,7 @@ async fn chat_json(api_key: &str, user_content: String) -> Result<ModelOut, AppE
     let resp = client
         .post(DEEPSEEK_URL)
         .headers(headers)
-        .json(&body)
+        .json(request_body)
         .send()
         .await
         .map_err(|e| AppError::Internal(format!("DeepSeek 请求失败: {e}")))?;
@@ -590,7 +599,11 @@ async fn chat_json(api_key: &str, user_content: String) -> Result<ModelOut, AppE
         .and_then(|c| c.message)
         .and_then(|m| m.content)
         .ok_or_else(|| AppError::Internal("DeepSeek 没有返回内容".into()))?;
-    parse_model_json(&content)
+    let model = parse_model_json(&content)?;
+    Ok(ChatJsonResult {
+        model,
+        raw_content: content,
+    })
 }
 
 async fn geocode_point(
@@ -675,6 +688,7 @@ pub async fn draft_itinerary(
     focus_day: Option<i32>,
     recommend: bool,
     fresh: bool,
+    log: Option<&AiDraftLogCtx<'_>>,
 ) -> Result<AiDraft, AppError> {
     if api_key.is_empty() {
         return Err(AppError::BadRequest("未配置 DEEPSEEK_API_KEY".into()));
@@ -730,86 +744,125 @@ pub async fn draft_itinerary(
 {scope}\n\n\
 {user_request}{links}"
     );
-    let model = chat_json(api_key, user_content).await?;
-    let mut summary = model.summary.unwrap_or_else(|| "已排好一版行程".into());
-    if let Some(check) = model.self_check {
-        let failed = [
-            (!check.direction_consistent.unwrap_or(true), "方向"),
-            (!check.excluded_omitted.unwrap_or(true), "排除"),
-            (!check.hotel_specific.unwrap_or(true), "住宿"),
-            (!check.no_repeated_segment.unwrap_or(true), "重复路段"),
-            (!check.no_radial_pattern.unwrap_or(true), "放射绕行"),
-            (!check.waypoint_has_note.unwrap_or(true), "途经备注"),
-        ]
-        .into_iter()
-        .filter_map(|(bad, label)| bad.then_some(label))
-        .collect::<Vec<_>>();
-        if !failed.is_empty() {
-            summary = format!("{summary}（自检未通过：{}）", failed.join("、"));
+    let request_json = build_deepseek_request(&user_content);
+    let started = std::time::Instant::now();
+    let mut model_response_raw: Option<String> = None;
+    let result: Result<AiDraft, AppError> = async {
+        let chat = chat_json(api_key, &request_json).await?;
+        model_response_raw = Some(chat.raw_content);
+        let model = chat.model;
+        let mut summary = model.summary.unwrap_or_else(|| "已排好一版行程".into());
+        if let Some(check) = model.self_check {
+            let failed = [
+                (!check.direction_consistent.unwrap_or(true), "方向"),
+                (!check.excluded_omitted.unwrap_or(true), "排除"),
+                (!check.hotel_specific.unwrap_or(true), "住宿"),
+                (!check.no_repeated_segment.unwrap_or(true), "重复路段"),
+                (!check.no_radial_pattern.unwrap_or(true), "放射绕行"),
+                (!check.waypoint_has_note.unwrap_or(true), "途经备注"),
+            ]
+            .into_iter()
+            .filter_map(|(bad, label)| bad.then_some(label))
+            .collect::<Vec<_>>();
+            if !failed.is_empty() {
+                summary = format!("{summary}（自检未通过：{}）", failed.join("、"));
+            }
         }
-    }
-    let mut draft = AiDraft {
-        summary,
-        days: vec![],
-    };
-    for d in model.days.unwrap_or_default() {
-        let day_num = d.day_num.unwrap_or(0);
-        if day_num < 1 || day_num > days {
-            continue;
-        }
-        let mut points = Vec::new();
-        for p in d.points.unwrap_or_default() {
-            let name = p.place_name.unwrap_or_default().trim().to_string();
-            if name.is_empty() {
+        let mut draft = AiDraft {
+            summary,
+            days: vec![],
+        };
+        for d in model.days.unwrap_or_default() {
+            let day_num = d.day_num.unwrap_or(0);
+            if day_num < 1 || day_num > days {
                 continue;
             }
-            points.push(AiPoint {
-                place_name: name.clone(),
-                query: p.query.unwrap_or_default(),
-                location: p.location.filter(|s| !s.trim().is_empty()),
-                point_type: map_point_type(&p.point_type.unwrap_or_default()),
-                stay_minutes: p.stay_minutes.filter(|n| *n > 0 && *n < 24 * 60),
-                arrive: p.arrive.filter(|s| s.len() >= 4 && s.len() <= 8),
-                note: p.note.filter(|s| !s.trim().is_empty()),
-                is_return: p.is_return,
-                longitude: None,
-                latitude: None,
-                found: false,
-            });
-            if points.len() >= if recommend { 8 } else { 6 } {
-                break;
+            let mut points = Vec::new();
+            for p in d.points.unwrap_or_default() {
+                let name = p.place_name.unwrap_or_default().trim().to_string();
+                if name.is_empty() {
+                    continue;
+                }
+                points.push(AiPoint {
+                    place_name: name.clone(),
+                    query: p.query.unwrap_or_default(),
+                    location: p.location.filter(|s| !s.trim().is_empty()),
+                    point_type: map_point_type(&p.point_type.unwrap_or_default()),
+                    stay_minutes: p.stay_minutes.filter(|n| *n > 0 && *n < 24 * 60),
+                    arrive: p.arrive.filter(|s| s.len() >= 4 && s.len() <= 8),
+                    note: p.note.filter(|s| !s.trim().is_empty()),
+                    is_return: p.is_return,
+                    longitude: None,
+                    latitude: None,
+                    found: false,
+                });
+                if points.len() >= if recommend { 8 } else { 6 } {
+                    break;
+                }
+            }
+            if !recommend {
+                if let Some(last) = points.last_mut() {
+                    finish_day_end(last, day_num == days);
+                }
+            }
+            if !points.is_empty() {
+                draft.days.push(AiDay {
+                    day_num,
+                    theme: d.theme.filter(|s| !s.trim().is_empty()),
+                    points,
+                });
             }
         }
-        if !recommend {
-            if let Some(last) = points.last_mut() {
-                finish_day_end(last, day_num == days);
+        if let Some(d) = focus_day {
+            if draft.days.len() == 1 {
+                draft.days[0].day_num = d;
+            } else {
+                draft.days.retain(|x| x.day_num == d);
             }
         }
-        if !points.is_empty() {
-            draft.days.push(AiDay {
-                day_num,
-                theme: d.theme.filter(|s| !s.trim().is_empty()),
-                points,
-            });
+        draft.days.sort_by_key(|d| d.day_num);
+        if draft.days.is_empty() {
+            return Err(AppError::BadRequest("没能排出地点，换种说法再试".into()));
+        }
+        let mut geo_cache: std::collections::HashMap<String, (f64, f64)> =
+            std::collections::HashMap::new();
+        for day in &mut draft.days {
+            for p in &mut day.points {
+                geocode_point(amap_key, amap_secret, destination, p, &mut geo_cache).await;
+            }
+            dedupe_adjacent_after_geocode(&mut day.points);
+        }
+        Ok(draft)
+    }
+    .await;
+
+    if let Some(ctx) = log {
+        let duration_ms = started.elapsed().as_millis().min(i32::MAX as u128) as i32;
+        let (result_json, error_message) = match &result {
+            Ok(draft) => (serde_json::to_value(draft).ok(), None),
+            Err(e) => (None, Some(e.to_string())),
+        };
+        if let Err(e) = insert_ai_plan_log(
+            ctx.pool,
+            AiPlanLogInsert {
+                travel_id: ctx.travel_id,
+                user_id: ctx.user_id,
+                mode: ctx.mode.to_string(),
+                fresh: ctx.fresh,
+                day_num: ctx.day_num,
+                user_prompt: ctx.user_prompt.clone(),
+                request_json,
+                model_response_raw,
+                result_json,
+                error_message,
+                duration_ms,
+            },
+        )
+        .await
+        {
+            tracing::warn!("save ai_plan_log failed: {e}");
         }
     }
-    if let Some(d) = focus_day {
-        if draft.days.len() == 1 {
-            draft.days[0].day_num = d;
-        } else {
-            draft.days.retain(|x| x.day_num == d);
-        }
-    }
-    draft.days.sort_by_key(|d| d.day_num);
-    if draft.days.is_empty() {
-        return Err(AppError::BadRequest("没能排出地点，换种说法再试".into()));
-    }
-    let mut geo_cache: std::collections::HashMap<String, (f64, f64)> = std::collections::HashMap::new();
-    for day in &mut draft.days {
-        for p in &mut day.points {
-            geocode_point(amap_key, amap_secret, destination, p, &mut geo_cache).await;
-        }
-        dedupe_adjacent_after_geocode(&mut day.points);
-    }
-    Ok(draft)
+
+    result
 }

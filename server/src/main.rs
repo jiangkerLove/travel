@@ -1,4 +1,5 @@
 mod ai;
+mod ai_log;
 mod auth;
 mod db;
 mod error;
