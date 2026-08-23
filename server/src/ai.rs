@@ -9,7 +9,7 @@ use crate::{
     util::{parse_date, valid_point_type},
 };
 
-const DEEPSEEK_URL: &str = "https://api.deepseek.com/chat/completions";
+const DEEPSEEK_URL: &str = "https://api.deepseek.com/responses";
 /// DeepSeek-V4-Flash-0731。旧名 deepseek-chat 已下线。
 const DEEPSEEK_MODEL: &str = "deepseek-v4-flash";
 
@@ -44,27 +44,6 @@ pub struct AiDraft {
 }
 
 #[derive(Deserialize)]
-struct ChatResp {
-    choices: Option<Vec<ChatChoice>>,
-    error: Option<ChatErr>,
-}
-
-#[derive(Deserialize)]
-struct ChatChoice {
-    message: Option<ChatMsg>,
-}
-
-#[derive(Deserialize)]
-struct ChatMsg {
-    content: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct ChatErr {
-    message: Option<String>,
-}
-
-#[derive(Deserialize)]
 struct ModelSelfCheck {
     direction_consistent: Option<bool>,
     excluded_omitted: Option<bool>,
@@ -74,6 +53,7 @@ struct ModelSelfCheck {
     waypoint_has_note: Option<bool>,
     return_segment_marked: Option<bool>,
     stay_minutes_not_null: Option<bool>,
+    search_referenced: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -207,24 +187,28 @@ fn finish_day_end(p: &mut AiPoint, is_trip_last_day: bool) {
 const SYSTEM_PROMPT: &str = r#"你是旅游环线规划引擎，专精中国自驾/自由行。只输出 JSON，不要 markdown，不要正文解释。
 
 【0. 数据源优先级】
-唯一数据源 = 用户本次输入。用户输入中的天数、日期、景点、方向为最终依据。
-如果用户输入中未指定方向，则由AI按路线合理性自动选择最优方向（顺时针或逆时针），并在 route_direction 字段中标注。
-不存在"系统参数"这一外部数据源。
+唯一数据源 = 用户本次输入 + 联网搜索结果。
+在执行路线规划之前，必须先搜索网上已有的环线攻略作为参考。
+
+【0.5 联网搜索规则】
+- 搜索关键词示例：
+  - 「{起点} {终点} 环线 顺时针/逆时针」
+  - 「{地区} 自驾环线 路线顺序」
+  - 「{起点}出发 {地区}大环线 攻略」
+- 如果用户指定了方向（顺时针/逆时针），搜索关键词必须包含该方向。
+- 搜索到攻略后，提取其中的路线顺序、住宿点、每日里程作为规划依据。
+- 如果搜索结果中有明确标注方向的路线，优先采用该方向；仅当用户指定的方向与搜索到的攻略方向相反时，保留用户指定方向，但调整景点顺序以匹配方向。
+- 搜索后须在 summary 中标注：「已参考搜索攻略，方向为{顺时针/逆时针}」
 
 【1. 环线方向锁定】
 全程主线方向处理规则：
 - 用户指定「顺时针」或「逆时针」时，必须严格执行，不得反向。
-- 用户未指定方向时，AI按以下标准自动选择最优方向：
-  1. 优先选择住宿点沿主线单向推进、无放射式绕行的方向
-  2. 优先选择每日车程更均衡、景点衔接更顺畅的方向
-  3. 优先选择能避开修路/拥堵路段的方向（如途经点可绕行）
-  4. 如两个方向均合理，优先选择顺时针
+- 如果用户未指定方向，AI 通过搜索参考现有攻略，选择网上最常见的方向。
+- 生成路线后，必须检查当天住宿点顺序是否沿主线单向推进，无反向绕行。
 
-【川西环线方向示例】
+【川西环线方向示例】（供参考，实际以搜索结果为准）
 顺时针：成都→康定（右下）→新都桥（左下）→丹巴（左）→四姑娘山（左上）→成都
 逆时针：成都→四姑娘山（左上）→丹巴（左）→新都桥（左下）→康定（右下）→成都
-
-【方向检查】生成路线后，检查每天住宿点的顺序是否沿主线单向推进，无反向绕行。
 
 【2. 住宿向前推进】
 每天 points 数组中，最后一个元素必须是 point_type=hotel。
@@ -253,7 +237,7 @@ place_name 必须是具体镇/县/片区地名，如「新都桥镇」「日隆�
 只输出一个 JSON 对象，不要 markdown 代码块，不要正文解释。结构如下：
 
 {
-  "summary": "全程顺时针环线，6天，成都出发经康定、新都桥、丹巴、四姑娘山返回成都。",
+  "summary": "全程顺时针环线，6天，成都出发经康定、新都桥、丹巴、四姑娘山返回成都。已参考搜索攻略，方向为顺时针",
   "route_direction": "顺时针",
   "self_check": {
     "direction_consistent": true,
@@ -263,7 +247,8 @@ place_name 必须是具体镇/县/片区地名，如「新都桥镇」「日隆�
     "no_radial_pattern": true,
     "waypoint_has_note": true,
     "return_segment_marked": true,
-    "stay_minutes_not_null": true
+    "stay_minutes_not_null": true,
+    "search_referenced": true
   },
   "days": [
     {
@@ -325,9 +310,9 @@ place_name 必须是具体镇/县/片区地名，如「新都桥镇」「日隆�
 }
 
 【6. 字段说明】
-summary：一句话概括全程（不含自检）。
+summary：一句话概括全程，末尾须标注「已参考搜索攻略，方向为{顺时针/逆时针}」。
 route_direction：全程主线方向，固定为「顺时针」或「逆时针」，全局唯一。
-self_check：8项布尔值自检结果：
+self_check：9项布尔值自检结果：
   - direction_consistent：方向是否全程一致
   - excluded_omitted：是否不含排除景点
   - hotel_specific：每晚住宿是否具体地名
@@ -336,6 +321,7 @@ self_check：8项布尔值自检结果：
   - waypoint_has_note：所有 waypoint 是否都有 note
   - return_segment_marked：所有折返段起止点是否都标了 is_return:true
   - stay_minutes_not_null：所有点的 stay_minutes 是否都不为 null
+  - search_referenced：是否参考了联网搜索攻略
 days：数组，每项对应一天。
 day_num：第几天，从1开始。
 theme：当天行程主题，格式为「出发地→目的地」，不含方向（方向由 route_direction 统一标识）。
@@ -353,7 +339,7 @@ is_return：是否为折返段端点，true/false。
 同一地点当天只出现一次。禁止相邻两个相同地名。
 
 【8. 生成后自检】
-生成后逐项核对 self_check 中8项指标，如实填写 true/false。
+生成后逐项核对 self_check 中9项指标，如实填写 true/false。
 有任何一项为 false，重新调整后输出。"#;
 
 /// 根据旅途开始日期列出 D1、D2… 对应公历
@@ -541,17 +527,45 @@ fn parse_model_json(raw: &str) -> Result<ModelOut, AppError> {
 fn build_deepseek_request(user_content: &str) -> Value {
     json!({
         "model": DEEPSEEK_MODEL,
+        "instructions": SYSTEM_PROMPT,
+        "input": user_content,
         "temperature": 0.5,
-        "thinking": { "type": "disabled" },
-        "response_format": { "type": "json_object" },
-        "messages": [
-            {
-                "role": "system",
-                "content": SYSTEM_PROMPT
-            },
-            { "role": "user", "content": user_content }
-        ]
+        "reasoning": { "effort": "none" },
+        "text": {
+            "format": { "type": "json_object" }
+        },
+        "tools": [{ "type": "web_search" }],
+        "tool_choice": "auto"
     })
+}
+
+fn extract_response_text(v: &Value) -> Option<String> {
+    if let Some(s) = v.get("output_text").and_then(|x| x.as_str()) {
+        let trimmed = s.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+    let output = v.get("output")?.as_array()?;
+    let mut texts = Vec::new();
+    for item in output {
+        if item.get("type").and_then(|t| t.as_str()) != Some("message") {
+            continue;
+        }
+        let Some(parts) = item.get("content").and_then(|c| c.as_array()) else {
+            continue;
+        };
+        for part in parts {
+            if part.get("type").and_then(|t| t.as_str()) == Some("output_text") {
+                if let Some(text) = part.get("text").and_then(|t| t.as_str()) {
+                    if !text.trim().is_empty() {
+                        texts.push(text.to_string());
+                    }
+                }
+            }
+        }
+    }
+    texts.into_iter().last()
 }
 
 struct ChatJsonResult {
@@ -568,7 +582,7 @@ async fn chat_json(api_key: &str, request_body: &Value) -> Result<ChatJsonResult
     );
     headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(40))
+        .timeout(std::time::Duration::from_secs(120))
         .build()
         .map_err(|e| AppError::Internal(format!("无法请求模型: {e}")))?;
     let resp = client
@@ -583,22 +597,24 @@ async fn chat_json(api_key: &str, request_body: &Value) -> Result<ChatJsonResult
         .json()
         .await
         .map_err(|_| AppError::Internal("DeepSeek 响应不是 JSON".into()))?;
-    let parsed: ChatResp = serde_json::from_value(v).unwrap_or(ChatResp {
-        choices: None,
-        error: None,
-    });
     if !status.is_success() {
-        let msg = parsed
-            .error
-            .and_then(|e| e.message)
+        let msg = v
+            .get("error")
+            .and_then(|e| e.get("message"))
+            .and_then(|m| m.as_str())
+            .map(str::to_string)
             .unwrap_or_else(|| format!("DeepSeek 错误 {status}"));
         return Err(AppError::BadRequest(msg));
     }
-    let content = parsed
-        .choices
-        .and_then(|c| c.into_iter().next())
-        .and_then(|c| c.message)
-        .and_then(|m| m.content)
+    if v.get("status").and_then(|s| s.as_str()) == Some("failed") {
+        let msg = v
+            .get("error")
+            .and_then(|e| e.get("message"))
+            .and_then(|m| m.as_str())
+            .unwrap_or("DeepSeek 生成失败");
+        return Err(AppError::BadRequest(msg.into()));
+    }
+    let content = extract_response_text(&v)
         .ok_or_else(|| AppError::Internal("DeepSeek 没有返回内容".into()))?;
     let model = parse_model_json(&content)?;
     Ok(ChatJsonResult {
@@ -763,6 +779,7 @@ pub async fn draft_itinerary(
                 (!check.waypoint_has_note.unwrap_or(true), "途经备注"),
                 (!check.return_segment_marked.unwrap_or(true), "折返标注"),
                 (!check.stay_minutes_not_null.unwrap_or(true), "停留时长"),
+                (!check.search_referenced.unwrap_or(true), "搜索参考"),
             ]
             .into_iter()
             .filter_map(|(bad, label)| bad.then_some(label))
