@@ -39,6 +39,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/plan/del", delete(plan::del).post(plan::del))
         .route("/api/plan/sort", post(plan::sort))
         .route("/api/plan/move", post(plan::move_plan))
+        .route("/api/plan/shift-days", post(plan::shift_days))
         .route("/api/plan/ai-draft", post(plan::ai_draft))
         .route("/api/plan/ai-logs", get(plan::ai_logs))
         .route("/api/plan/ai-apply", post(plan::ai_apply))

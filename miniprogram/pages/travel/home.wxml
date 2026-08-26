@@ -54,7 +54,9 @@
         wx:for="{{days}}"
         wx:key="day_num"
         bind:tap="switchDay"
+        bindlongpress="onDayChipLongPress"
         data-index="{{index}}"
+        data-day="{{item.day_num}}"
       >
         <text class="day-n">D{{item.day_num}}</text>
         <text class="day-d">{{item.shortDate}}</text>
@@ -307,6 +309,7 @@
   </view>
   <view class="edit-bar" wx:elif="{{mode === 'edit'}}">
     <view class="edit-bar-btn ai" bind:tap="openAi">AI 排程</view>
+    <view class="edit-bar-btn ghost narrow" bind:tap="openDayShift">移日程</view>
     <view class="edit-bar-btn add" bind:tap="quickAddEnd">＋ 地点</view>
     <view class="edit-bar-btn ghost" wx:if="{{mapScope === 'all'}}" bind:tap="previewAll">预览全程</view>
     <view class="edit-bar-btn ghost" wx:else bind:tap="previewDay">{{routesReady ? '重预览' : '预览'}}</view>
@@ -358,6 +361,59 @@
         <view class="ai-row">
           <view class="ai-btn main tight {{aiLoading ? 'off' : ''}}" catch:tap="runAiDraft">{{aiPending ? (aiMode === 'recommend' ? '按提示继续推荐' : '按提示继续改') : (aiMode === 'recommend' ? '推荐并预览' : (aiDayNum ? '生成这一天' : '生成并预览'))}}</view>
         </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="ai-mask" wx:if="{{dayShiftOpen}}" catch:tap="closeDayShift">
+    <view class="ai-sheet day-shift-sheet" catch:tap="onAiSheetTap">
+      <view class="ai-head">
+        <view>
+          <view class="ai-title">调整日程</view>
+          <view class="ai-sub">不改旅途日期，平移选定天的行程</view>
+        </view>
+        <view class="ai-close" catch:tap="closeDayShift">取消</view>
+      </view>
+
+      <view class="day-shift-tools">
+        <view class="day-shift-dir">
+          <view class="dir-chip {{dayShiftDelta < 0 ? 'on' : ''}}" catch:tap="setDayShiftSign" data-v="-1">提前</view>
+          <view class="dir-chip {{dayShiftDelta > 0 ? 'on' : ''}}" catch:tap="setDayShiftSign" data-v="1">推后</view>
+        </view>
+        <view class="day-shift-steps">
+          <view class="step-btn" catch:tap="bumpDayShiftSteps" data-d="-1">−</view>
+          <view class="step-val">{{dayShiftDelta < 0 ? '提前' : '推后'}} {{dayShiftDelta < 0 ? -dayShiftDelta : dayShiftDelta}} 天</view>
+          <view class="step-btn" catch:tap="bumpDayShiftSteps" data-d="1">＋</view>
+        </view>
+      </view>
+
+      <view class="day-shift-quick">
+        <text class="quick-link" catch:tap="pickDayShiftAll" data-mode="planned">选有行程</text>
+        <text class="quick-sep">·</text>
+        <text class="quick-link" catch:tap="pickDayShiftAll" data-mode="all">全选</text>
+        <text class="quick-sep">·</text>
+        <text class="quick-link" catch:tap="pickDayShiftAll" data-mode="none">清空</text>
+      </view>
+
+      <scroll-view scroll-y class="day-pick-list day-shift-list" enhanced show-scrollbar="{{false}}">
+        <view
+          class="day-pick-row day-shift-row {{item.checked ? 'on' : ''}}"
+          wx:for="{{dayShiftDays}}"
+          wx:key="day_num"
+          catch:tap="toggleDayShiftDay"
+          data-day="{{item.day_num}}"
+        >
+          <view class="shift-check {{item.checked ? 'on' : ''}}"></view>
+          <view>
+            <view class="day-pick-n">D{{item.day_num}} · {{item.shortDate}}</view>
+            <view class="day-pick-s">{{item.hint}}</view>
+          </view>
+        </view>
+      </scroll-view>
+
+      <view class="day-shift-preview {{dayShiftBlocked ? 'warn' : ''}}">{{dayShiftPreview}}</view>
+      <view class="day-shift-apply {{dayShiftBlocked || !dayShiftHasPick || dayShiftBusy ? 'off' : ''}}" catch:tap="applyDayShift">
+        确认移动
       </view>
     </view>
   </view>

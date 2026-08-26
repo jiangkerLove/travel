@@ -785,6 +785,208 @@ pub async fn move_plan(
     Ok(ok(to_vo(&updated)))
 }
 
+const SHIFT_TEMP_OFFSET: i32 = 10_000;
+
+#[derive(Deserialize)]
+pub struct ShiftDaysReq {
+    pub travel_id: i64,
+    pub delta: i32,
+    pub day_nums: Vec<i32>,
+    #[serde(default)]
+    pub dry_run: bool,
+}
+
+#[derive(Serialize)]
+pub struct ShiftDayMove {
+    pub from_day: i32,
+    pub to_day: i32,
+    pub plan_count: i64,
+}
+
+#[derive(Serialize)]
+pub struct ShiftDayConflict {
+    pub day_num: i32,
+    pub message: String,
+}
+
+#[derive(Serialize)]
+pub struct ShiftDaysResp {
+    pub ok: bool,
+    pub moves: Vec<ShiftDayMove>,
+    pub conflicts: Vec<ShiftDayConflict>,
+}
+
+async fn day_plan_counts(
+    pool: &sqlx::PgPool,
+    travel_id: i64,
+) -> Result<std::collections::HashMap<i32, i64>, AppError> {
+    let rows: Vec<(i32, i64)> = sqlx::query_as(
+        "SELECT day_num, COUNT(*)::bigint FROM day_plan WHERE travel_id = $1 GROUP BY day_num",
+    )
+    .bind(travel_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().collect())
+}
+
+fn analyze_day_shift(
+    total_days: i32,
+    selected: &[i32],
+    delta: i32,
+    counts: &std::collections::HashMap<i32, i64>,
+) -> ShiftDaysResp {
+    let mut sel: std::collections::HashSet<i32> = selected.iter().copied().collect();
+    sel.retain(|d| *d >= 1 && *d <= total_days);
+    let mut moves = Vec::new();
+    let mut conflicts = Vec::new();
+    if delta == 0 || sel.is_empty() {
+        return ShiftDaysResp {
+            ok: false,
+            moves,
+            conflicts,
+        };
+    }
+    let mut ordered: Vec<i32> = sel.iter().copied().collect();
+    ordered.sort_unstable();
+    for day in ordered {
+        let target = day + delta;
+        if target < 1 || target > total_days {
+            conflicts.push(ShiftDayConflict {
+                day_num: day,
+                message: if target < 1 {
+                    "前面没有空天".into()
+                } else {
+                    "后面没有空天".into()
+                },
+            });
+            continue;
+        }
+        let foreign = counts.get(&target).copied().unwrap_or(0) > 0 && !sel.contains(&target);
+        if foreign {
+            conflicts.push(ShiftDayConflict {
+                day_num: day,
+                message: format!("D{target} 已有行程"),
+            });
+            continue;
+        }
+        moves.push(ShiftDayMove {
+            from_day: day,
+            to_day: target,
+            plan_count: counts.get(&day).copied().unwrap_or(0),
+        });
+    }
+    let ok = !moves.is_empty() && conflicts.is_empty();
+    ShiftDaysResp {
+        ok,
+        moves,
+        conflicts,
+    }
+}
+
+async fn compact_day_sort(pool: &sqlx::PgPool, travel_id: i64, day_num: i32) -> Result<(), AppError> {
+    let ids: Vec<i64> = sqlx::query_scalar(
+        "SELECT id FROM day_plan WHERE travel_id = $1 AND day_num = $2 ORDER BY sort ASC, id ASC",
+    )
+    .bind(travel_id)
+    .bind(day_num)
+    .fetch_all(pool)
+    .await?;
+    for (i, id) in ids.iter().enumerate() {
+        if i == 0 {
+            sqlx::query(
+                "UPDATE day_plan SET sort = 0, traffic_type = NULL, traffic_duration = NULL WHERE id = $1",
+            )
+            .bind(id)
+            .execute(pool)
+            .await?;
+        } else {
+            sqlx::query(
+                "UPDATE day_plan SET sort = $1, traffic_duration = NULL, traffic_type = COALESCE(NULLIF(traffic_type, ''), 'drive') WHERE id = $2",
+            )
+            .bind(i as i32)
+            .bind(id)
+            .execute(pool)
+            .await?;
+        }
+    }
+    Ok(())
+}
+
+/// 在不改旅途起止日的前提下，平移选定天的行程
+pub async fn shift_days(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Json(req): Json<ShiftDaysReq>,
+) -> Result<Json<ApiOk<ShiftDaysResp>>, AppError> {
+    require_editor(&state.pool, req.travel_id, user.id).await?;
+    let t = find_travel(&state.pool, req.travel_id).await?;
+    if t.is_lock {
+        return Err(AppError::BadRequest("已锁定，不可调整日程".into()));
+    }
+    if crate::sample::is_sample_remark(&t.remark) {
+        return Err(AppError::BadRequest("示例旅途不可修改".into()));
+    }
+    if req.delta == 0 {
+        return Err(AppError::BadRequest("请指定移动天数".into()));
+    }
+    let total_days = day_count(t.start_date, t.end_date);
+    let mut day_nums: Vec<i32> = req
+        .day_nums
+        .iter()
+        .copied()
+        .filter(|d| *d >= 1 && *d <= total_days)
+        .collect();
+    day_nums.sort_unstable();
+    day_nums.dedup();
+    if day_nums.is_empty() {
+        return Err(AppError::BadRequest("请选择要移动的天".into()));
+    }
+
+    let counts = day_plan_counts(&state.pool, req.travel_id).await?;
+    let preview = analyze_day_shift(total_days, &day_nums, req.delta, &counts);
+    if req.dry_run || !preview.ok {
+        return Ok(ok(preview));
+    }
+
+    let mut tx = state.pool.begin().await?;
+    sqlx::query(
+        "UPDATE day_plan SET day_num = day_num + $1 WHERE travel_id = $2 AND day_num = ANY($3)",
+    )
+    .bind(SHIFT_TEMP_OFFSET)
+    .bind(req.travel_id)
+    .bind(&day_nums)
+    .execute(&mut *tx)
+    .await?;
+    for mv in &preview.moves {
+        sqlx::query(
+            "UPDATE day_plan SET day_num = $1 WHERE travel_id = $2 AND day_num = $3",
+        )
+        .bind(mv.to_day)
+        .bind(req.travel_id)
+        .bind(mv.from_day + SHIFT_TEMP_OFFSET)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+
+    let mut affected: std::collections::HashSet<i32> = day_nums.iter().copied().collect();
+    for mv in &preview.moves {
+        affected.insert(mv.to_day);
+    }
+    let mut affected: Vec<i32> = affected.into_iter().collect();
+    affected.sort_unstable();
+    for day in affected {
+        compact_day_sort(&state.pool, req.travel_id, day).await?;
+    }
+
+    let plan_ids: Vec<i64> = sqlx::query_scalar("SELECT id FROM day_plan WHERE travel_id = $1")
+        .bind(req.travel_id)
+        .fetch_all(&state.pool)
+        .await?;
+    invalidate_route_cache(&state.pool, &plan_ids).await;
+    Ok(ok(preview))
+}
+
 pub async fn map_global(
     State(state): State<AppState>,
     user: AuthUser,

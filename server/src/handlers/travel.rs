@@ -260,6 +260,8 @@ pub struct UpdateReq {
     pub end_date: Option<String>,
     pub remark: Option<String>,
     pub cover: Option<String>,
+    /// 改开始日时：`shift` 整体平移行程；`preserve` 保留原公历日期
+    pub date_shift_mode: Option<String>,
 }
 
 /// 团长修改旅途信息 / 日期；缩短日期时删除超出天数的行程点
@@ -312,7 +314,27 @@ pub async fn update(
         return Err(AppError::BadRequest("行程请控制在 60 天以内".into()));
     }
 
+    let start_delta = (start - t.start_date).num_days();
+    let end_delta = (end - t.end_date).num_days();
+    let preserve_calendar = req
+        .date_shift_mode
+        .as_deref()
+        .map(|s| s.trim().eq_ignore_ascii_case("preserve"))
+        .unwrap_or(false);
+
     let mut tx = state.pool.begin().await?;
+    // 仅改开始日、或起止不同步移动且选择保留原日历时：按公历保留各天行程（可空出开头）
+    if preserve_calendar && start_delta != 0 && start_delta != end_delta {
+        sqlx::query("UPDATE day_plan SET day_num = day_num - $1 WHERE travel_id = $2")
+            .bind(start_delta as i32)
+            .bind(req.travel_id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM day_plan WHERE travel_id = $1 AND day_num < 1")
+            .bind(req.travel_id)
+            .execute(&mut *tx)
+            .await?;
+    }
     // 缩短行程：清掉超出天数的点位（账单上的绑定会置空）
     sqlx::query("DELETE FROM day_plan WHERE travel_id = $1 AND day_num > $2")
         .bind(req.travel_id)

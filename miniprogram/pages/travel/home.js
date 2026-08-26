@@ -22,6 +22,60 @@ function todayStr() {
   return `${d.getFullYear()}-${m}-${day}`
 }
 
+function analyzeDayShift(days, selected, delta) {
+  const totalDays = (days || []).length
+  const sel = new Set((selected || []).filter((d) => d >= 1 && d <= totalDays))
+  const moves = []
+  const conflicts = []
+  if (!delta || !sel.size) return { ok: false, moves, conflicts }
+  const ordered = [...sel].sort((a, b) => a - b)
+  for (const day of ordered) {
+    const target = day + delta
+    if (target < 1 || target > totalDays) {
+      conflicts.push({
+        day_num: day,
+        message: target < 1 ? '前面没有空天' : '后面没有空天',
+      })
+      continue
+    }
+    const targetDay = days.find((d) => d.day_num === target)
+    const targetCount = ((targetDay && targetDay.plans) || []).length
+    if (targetCount > 0 && !sel.has(target)) {
+      conflicts.push({ day_num: day, message: `D${target} 已有行程` })
+      continue
+    }
+    const fromDay = days.find((d) => d.day_num === day)
+    moves.push({
+      from_day: day,
+      to_day: target,
+      plan_count: ((fromDay && fromDay.plans) || []).length,
+    })
+  }
+  return { ok: moves.length > 0 && !conflicts.length, moves, conflicts }
+}
+
+function formatShiftPreview(result, delta) {
+  if (!result) return '请选择要移动的天'
+  if (result.conflicts && result.conflicts.length) {
+    return result.conflicts.map((c) => `D${c.day_num}：${c.message}`).join('；')
+  }
+  if (!result.moves || !result.moves.length) return '请选择要移动的天'
+  const dir = delta < 0 ? '提前' : '推后'
+  const steps = Math.abs(delta)
+  const lines = result.moves.map((m) => `D${m.from_day}→D${m.to_day}`)
+  return `${dir} ${steps} 天：${lines.join('，')}`
+}
+
+function syncDayShiftPreview(days, dayShiftDays, dayShiftDelta) {
+  const selected = (dayShiftDays || []).filter((d) => d.checked).map((d) => d.day_num)
+  const preview = analyzeDayShift(days, selected, dayShiftDelta)
+  return {
+    dayShiftPreview: formatShiftPreview(preview, dayShiftDelta),
+    dayShiftBlocked: !preview.ok,
+    dayShiftHasPick: selected.length > 0,
+  }
+}
+
 /** 浏览态默认：行程期内看今天，否则看全程 */
 function pickBrowseScope(days, trip) {
   const list = days || []
@@ -178,6 +232,13 @@ Page({
     dayPickOpen: false,
     dayPickTitle: '加到哪一天',
     dayPickDays: [],
+    dayShiftOpen: false,
+    dayShiftDays: [],
+    dayShiftDelta: -1,
+    dayShiftPreview: '',
+    dayShiftBlocked: true,
+    dayShiftHasPick: false,
+    dayShiftBusy: false,
   },
   onLoad(q) {
     const mode = q.mode === 'edit' ? 'edit' : 'browse'
@@ -813,6 +874,122 @@ Page({
   closeDayPick() {
     if (this._dayPickIgnoreUntil && Date.now() < this._dayPickIgnoreUntil) return
     this.setData({ dayPickOpen: false })
+  },
+  openDayShift(e) {
+    const trip = this.data.trip || {}
+    if (trip.is_lock) {
+      wx.showToast({ title: '已锁定，不可调整', icon: 'none' })
+      return
+    }
+    if (!this.data.canEdit) {
+      wx.showToast({ title: '暂无编辑权限', icon: 'none' })
+      return
+    }
+    const days = this.data.days || []
+    if (!days.length) {
+      wx.showToast({ title: '还没有行程日期', icon: 'none' })
+      return
+    }
+    const focusDay = Number((e && e.currentTarget && e.currentTarget.dataset.day) || 0)
+    const dayShiftDays = days.map((d) => {
+      const count = (d.plans || []).length
+      return {
+        day_num: d.day_num,
+        shortDate: d.shortDate || (d.date || '').slice(5),
+        checked: focusDay ? d.day_num === focusDay : count > 0,
+        hint: count ? `${count} 个地点` : '空天',
+      }
+    })
+    this.setData({
+      dayShiftOpen: true,
+      dayShiftDelta: -1,
+      dayShiftDays,
+      dayShiftBusy: false,
+      ...syncDayShiftPreview(days, dayShiftDays, -1),
+    })
+  },
+  closeDayShift() {
+    this.setData({ dayShiftOpen: false, dayShiftBusy: false })
+  },
+  onDayChipLongPress(e) {
+    if (this.data.mode !== 'edit') return
+    this.openDayShift(e)
+  },
+  setDayShiftSign(e) {
+    const sign = Number(e.currentTarget.dataset.v) || 1
+    const steps = Math.max(1, Math.abs(this.data.dayShiftDelta || 1))
+    const dayShiftDelta = sign < 0 ? -steps : steps
+    this.setData({
+      dayShiftDelta,
+      ...syncDayShiftPreview(this.data.days, this.data.dayShiftDays, dayShiftDelta),
+    })
+  },
+  bumpDayShiftSteps(e) {
+    const bump = Number(e.currentTarget.dataset.d) || 0
+    const sign = (this.data.dayShiftDelta || 1) < 0 ? -1 : 1
+    const steps = Math.min(5, Math.max(1, Math.abs(this.data.dayShiftDelta || 1) + bump))
+    const dayShiftDelta = sign * steps
+    this.setData({
+      dayShiftDelta,
+      ...syncDayShiftPreview(this.data.days, this.data.dayShiftDays, dayShiftDelta),
+    })
+  },
+  toggleDayShiftDay(e) {
+    const dayNum = Number(e.currentTarget.dataset.day)
+    const dayShiftDays = (this.data.dayShiftDays || []).map((d) => (
+      d.day_num === dayNum ? { ...d, checked: !d.checked } : d
+    ))
+    this.setData({
+      dayShiftDays,
+      ...syncDayShiftPreview(this.data.days, dayShiftDays, this.data.dayShiftDelta),
+    })
+  },
+  pickDayShiftAll(e) {
+    const mode = e.currentTarget.dataset.mode
+    const dayShiftDays = (this.data.dayShiftDays || []).map((d) => ({
+      ...d,
+      checked: mode === 'all' ? true : mode === 'planned' ? d.hint !== '空天' : false,
+    }))
+    this.setData({
+      dayShiftDays,
+      ...syncDayShiftPreview(this.data.days, dayShiftDays, this.data.dayShiftDelta),
+    })
+  },
+  async applyDayShift() {
+    if (this.data.dayShiftBusy || this.data.dayShiftBlocked) return
+    const selected = (this.data.dayShiftDays || []).filter((d) => d.checked).map((d) => d.day_num)
+    if (!selected.length) {
+      wx.showToast({ title: '请选择要移动的天', icon: 'none' })
+      return
+    }
+    this.setData({ dayShiftBusy: true })
+    wx.showLoading({ title: '移动中' })
+    try {
+      const res = await api.planShiftDays({
+        travel_id: this.data.id,
+        delta: this.data.dayShiftDelta,
+        day_nums: selected,
+      })
+      if (!res || !res.ok) {
+        const msg = (res && res.conflicts && res.conflicts.length)
+          ? res.conflicts.map((c) => `D${c.day_num}：${c.message}`).join('；')
+          : '无法移动'
+        wx.showToast({ title: msg, icon: 'none', duration: 2800 })
+        if (res && res.conflicts) {
+          this.setData({
+            ...syncDayShiftPreview(this.data.days, this.data.dayShiftDays, this.data.dayShiftDelta),
+          })
+        }
+        return
+      }
+      this._dayRoutes = {}
+      this.setData({ dayShiftOpen: false, routesReady: false })
+      await this.loadPlans()
+      wx.showToast({ title: '已移动', icon: 'success' })
+    } finally {
+      wx.hideLoading()
+      this.setData({ dayShiftBusy: false })
+    }
   },
   onPickDay(e) {
     const dayNum = Number(e.currentTarget.dataset.day)
@@ -1692,6 +1869,8 @@ Page({
     if (this.data.canEdit) {
       items.push('排行程')
       actions.push('plan')
+      items.push('调整日程')
+      actions.push('shift')
     }
     if (trip.role === 1) {
       items.push('修改旅途')
@@ -1708,6 +1887,7 @@ Page({
         const action = actions[r.tapIndex]
         setTimeout(() => {
           if (action === 'plan') this.enterEdit()
+          else if (action === 'shift') this.openDayShift()
           else if (action === 'edit') this.goEditTravel()
           else if (action === 'archive') this.archive()
         }, 80)

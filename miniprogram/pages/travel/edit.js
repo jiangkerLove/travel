@@ -1,6 +1,13 @@
 const { api } = require('../../utils/api')
 const { coverOptions, ROUTE_KEY } = require('../../utils/illust')
 
+function dateDelta(from, to) {
+  if (!from || !to) return 0
+  const a = new Date(from.replace(/-/g, '/'))
+  const b = new Date(to.replace(/-/g, '/'))
+  return Math.round((b - a) / 86400000)
+}
+
 function dayCount(start, end) {
   if (!start || !end || end < start) return 0
   const a = new Date(start.replace(/-/g, '/'))
@@ -33,6 +40,7 @@ Page({
     remark: '',
     cover: ROUTE_KEY,
     covers: coverOptions(),
+    originStart: '',
     originEnd: '',
     ready: false,
     dayCount: 0,
@@ -55,6 +63,7 @@ Page({
         end_date: trip.end_date || '',
         remark: trip.remark || '',
         cover: trip.cover || ROUTE_KEY,
+        originStart: trip.start_date || '',
         originEnd: trip.end_date || '',
         originDays: trip.day_count || 0,
       }
@@ -91,12 +100,20 @@ Page({
   },
   async submit() {
     if (!this.data.ready || this.data.busy) return
-    const { id, travel_name, destination, start_date, end_date, remark, cover, dayCount, originDays } = this.data
-    const doSave = async () => {
+    const {
+      id, travel_name, destination, start_date, end_date, remark, cover,
+      dayCount, originDays, originStart, originEnd,
+    } = this.data
+    const startDelta = dateDelta(originStart, start_date)
+    const endDelta = dateDelta(originEnd, end_date)
+    const needShiftMode = startDelta !== 0 && startDelta !== endDelta
+    const shorten = dayCount < (originDays || 0)
+
+    const doSave = async (dateShiftMode) => {
       this.setData({ busy: true })
       wx.showLoading({ title: '保存中' })
       try {
-        await api.travelUpdate({
+        const payload = {
           travel_id: id,
           travel_name: travel_name.trim(),
           destination: destination.trim(),
@@ -104,7 +121,9 @@ Page({
           end_date,
           remark: (remark || '').trim(),
           cover: cover || ROUTE_KEY,
-        })
+        }
+        if (dateShiftMode) payload.date_shift_mode = dateShiftMode
+        await api.travelUpdate(payload)
         getApp().markTripsDirty && getApp().markTripsDirty()
         wx.showToast({ title: '已保存', icon: 'success' })
         setTimeout(() => wx.navigateBack(), 400)
@@ -113,7 +132,34 @@ Page({
         this.setData({ busy: false })
       }
     }
-    if (dayCount < (originDays || 0)) {
+
+    const confirmShorten = (dateShiftMode) => {
+      if (!shorten) {
+        doSave(dateShiftMode)
+        return
+      }
+      wx.showModal({
+        title: '缩短日期',
+        content: `新行程共 ${dayCount} 天，第 ${dayCount + 1} 天及之后的行程点将被删除，是否继续？`,
+        success: (r) => {
+          if (r.confirm) doSave(dateShiftMode)
+        },
+      })
+    }
+
+    if (needShiftMode) {
+      wx.showActionSheet({
+        itemList: ['整体平移行程', '保留原日历'],
+        success: (r) => {
+          if (r.tapIndex === undefined || r.tapIndex < 0) return
+          const mode = r.tapIndex === 0 ? 'shift' : 'preserve'
+          confirmShorten(mode)
+        },
+      })
+      return
+    }
+
+    if (shorten) {
       wx.showModal({
         title: '缩短日期',
         content: `新行程共 ${dayCount} 天，第 ${dayCount + 1} 天及之后的行程点将被删除，是否继续？`,
@@ -123,6 +169,7 @@ Page({
       })
       return
     }
+
     await doSave()
   },
 })
