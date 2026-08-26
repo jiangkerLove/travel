@@ -88,6 +88,10 @@
     show-scrollbar="{{false}}"
   >
     <view wx:if="{{tab === 'plan' || mode === 'edit'}}" class="body-pad">
+      <view class="route-sum" wx:if="{{routeStat.hasRoute}}">
+        <text class="route-sum-k">{{routeStat.label}}</text>
+        <text class="route-sum-v">{{routeStat.summaryText}}</text>
+      </view>
       <!-- 全程预览 -->
       <block wx:if="{{mapScope === 'all'}}">
         <view class="empty-card" wx:if="{{!days.length}}">
@@ -368,52 +372,37 @@
   <view class="ai-mask" wx:if="{{dayShiftOpen}}" catch:tap="closeDayShift">
     <view class="ai-sheet day-shift-sheet" catch:tap="onAiSheetTap">
       <view class="ai-head">
-        <view>
-          <view class="ai-title">调整日程</view>
-          <view class="ai-sub">不改旅途日期，平移选定天的行程</view>
-        </view>
+        <view class="ai-title">调整日程</view>
         <view class="ai-close" catch:tap="closeDayShift">取消</view>
       </view>
 
-      <view class="day-shift-tools">
-        <view class="day-shift-dir">
-          <view class="dir-chip {{dayShiftDelta < 0 ? 'on' : ''}}" catch:tap="setDayShiftSign" data-v="-1">提前</view>
-          <view class="dir-chip {{dayShiftDelta > 0 ? 'on' : ''}}" catch:tap="setDayShiftSign" data-v="1">推后</view>
-        </view>
-        <view class="day-shift-steps">
-          <view class="step-btn" catch:tap="bumpDayShiftSteps" data-d="-1">−</view>
-          <view class="step-val">{{dayShiftDelta < 0 ? '提前' : '推后'}} {{dayShiftDelta < 0 ? -dayShiftDelta : dayShiftDelta}} 天</view>
-          <view class="step-btn" catch:tap="bumpDayShiftSteps" data-d="1">＋</view>
-        </view>
-      </view>
-
-      <view class="day-shift-quick">
-        <text class="quick-link" catch:tap="pickDayShiftAll" data-mode="planned">选有行程</text>
-        <text class="quick-sep">·</text>
-        <text class="quick-link" catch:tap="pickDayShiftAll" data-mode="all">全选</text>
-        <text class="quick-sep">·</text>
-        <text class="quick-link" catch:tap="pickDayShiftAll" data-mode="none">清空</text>
-      </view>
-
-      <scroll-view scroll-y class="day-pick-list day-shift-list" enhanced show-scrollbar="{{false}}">
+      <scroll-view scroll-y class="day-pick-list" enhanced show-scrollbar="{{false}}">
         <view
-          class="day-pick-row day-shift-row {{item.checked ? 'on' : ''}}"
+          class="day-pick-row {{item.checked ? 'shift-on' : ''}} {{item.incomingFrom ? 'shift-in' : ''}}"
           wx:for="{{dayShiftDays}}"
           wx:key="day_num"
           catch:tap="toggleDayShiftDay"
           data-day="{{item.day_num}}"
         >
-          <view class="shift-check {{item.checked ? 'on' : ''}}"></view>
-          <view>
-            <view class="day-pick-n">D{{item.day_num}} · {{item.shortDate}}</view>
-            <view class="day-pick-s">{{item.hint}}</view>
+          <view class="shift-row-l">
+            <view class="day-pick-n" wx:if="{{!item.targetDay}}">D{{item.day_num}} · {{item.shortDate}}</view>
+            <view class="day-pick-n shift-move" wx:else>
+              <text>D{{item.day_num}} · {{item.shortDate}}</text>
+              <text class="shift-arrow">→</text>
+              <text class="shift-to">D{{item.targetDay}} · {{item.targetShortDate}}</text>
+            </view>
+            <view class="day-pick-s">
+              {{item.hint}}<text wx:if="{{item.incomingFrom && !item.checked}}" class="shift-from"> · 将收到 D{{item.incomingFrom}}</text>
+            </view>
           </view>
+          <text class="shift-mark" wx:if="{{item.checked}}">✓</text>
         </view>
       </scroll-view>
 
-      <view class="day-shift-preview {{dayShiftBlocked ? 'warn' : ''}}">{{dayShiftPreview}}</view>
-      <view class="day-shift-apply {{dayShiftBlocked || !dayShiftHasPick || dayShiftBusy ? 'off' : ''}}" catch:tap="applyDayShift">
-        确认移动
+      <view class="shift-foot">
+        <view class="shift-btn {{!dayShiftHasPick ? 'off' : ''}}" catch:tap="shiftDaysEarlier">往前</view>
+        <view class="shift-btn {{!dayShiftHasPick ? 'off' : ''}}" catch:tap="shiftDaysLater">往后</view>
+        <view class="shift-btn main {{dayShiftBlocked || dayShiftBusy ? 'off' : ''}}" catch:tap="applyDayShift">确定</view>
       </view>
     </view>
   </view>

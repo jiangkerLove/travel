@@ -12,8 +12,13 @@ const {
   openMap,
   formatLegHint,
   formatLegLabel,
+  buildRouteStatSummary,
 } = require('../../utils/constants')
 const { fillLineRoutes } = require('../../utils/direction')
+
+function buildRouteStat(days, mapScope, dayIndex, apiRouteStat) {
+  return buildRouteStatSummary(days, mapScope, dayIndex, apiRouteStat)
+}
 
 function todayStr() {
   const d = new Date()
@@ -28,8 +33,7 @@ function analyzeDayShift(days, selected, delta) {
   const moves = []
   const conflicts = []
   if (!delta || !sel.size) return { ok: false, moves, conflicts }
-  const ordered = [...sel].sort((a, b) => a - b)
-  for (const day of ordered) {
+  for (const day of [...sel].sort((a, b) => a - b)) {
     const target = day + delta
     if (target < 1 || target > totalDays) {
       conflicts.push({
@@ -44,34 +48,53 @@ function analyzeDayShift(days, selected, delta) {
       conflicts.push({ day_num: day, message: `D${target} 已有行程` })
       continue
     }
-    const fromDay = days.find((d) => d.day_num === day)
-    moves.push({
-      from_day: day,
-      to_day: target,
-      plan_count: ((fromDay && fromDay.plans) || []).length,
-    })
+    moves.push({ from_day: day, to_day: target })
   }
   return { ok: moves.length > 0 && !conflicts.length, moves, conflicts }
 }
 
-function formatShiftPreview(result, delta) {
-  if (!result) return '请选择要移动的天'
-  if (result.conflicts && result.conflicts.length) {
-    return result.conflicts.map((c) => `D${c.day_num}：${c.message}`).join('；')
-  }
-  if (!result.moves || !result.moves.length) return '请选择要移动的天'
-  const dir = delta < 0 ? '提前' : '推后'
-  const steps = Math.abs(delta)
-  const lines = result.moves.map((m) => `D${m.from_day}→D${m.to_day}`)
-  return `${dir} ${steps} 天：${lines.join('，')}`
+function canShiftTo(days, dayShiftDays, delta) {
+  if (delta === 0) return true
+  const selected = (dayShiftDays || []).filter((d) => d.checked).map((d) => d.day_num)
+  if (!selected.length) return false
+  return analyzeDayShift(days, selected, delta).ok
 }
 
-function syncDayShiftPreview(days, dayShiftDays, dayShiftDelta) {
+function shiftBlockedTip(days, dayShiftDays, delta) {
+  if (delta === 0) return ''
   const selected = (dayShiftDays || []).filter((d) => d.checked).map((d) => d.day_num)
-  const preview = analyzeDayShift(days, selected, dayShiftDelta)
+  if (!selected.length) return '请先选择天数'
+  const result = analyzeDayShift(days, selected, delta)
+  if (result.ok) return ''
+  const c = result.conflicts[0]
+  if (!c) return '无法再移动'
+  return c.day_num ? `D${c.day_num}：${c.message}` : c.message
+}
+
+function syncDayShiftState(days, dayShiftDays, delta) {
+  const selected = (dayShiftDays || []).filter((d) => d.checked).map((d) => d.day_num)
+  const preview = delta === 0 ? { ok: false, moves: [] } : analyzeDayShift(days, selected, delta)
+  const incoming = new Map()
+  if (preview.ok) {
+    for (const m of preview.moves) {
+      incoming.set(m.to_day, m.from_day)
+    }
+  }
+  const enriched = (dayShiftDays || []).map((d) => {
+    let targetDay = 0
+    let targetShortDate = ''
+    if (d.checked && delta !== 0 && preview.ok) {
+      targetDay = d.day_num + delta
+      const target = (days || []).find((x) => x.day_num === targetDay)
+      targetShortDate = (target && (target.shortDate || (target.date || '').slice(5))) || ''
+    }
+    const incomingFrom = incoming.get(d.day_num) || 0
+    return { ...d, targetDay, targetShortDate, incomingFrom }
+  })
   return {
-    dayShiftPreview: formatShiftPreview(preview, dayShiftDelta),
-    dayShiftBlocked: !preview.ok,
+    dayShiftDelta: delta,
+    dayShiftDays: enriched,
+    dayShiftBlocked: !selected.length || delta === 0,
     dayShiftHasPick: selected.length > 0,
   }
 }
@@ -202,6 +225,7 @@ Page({
     billEmptyTitle: '还没有账单',
     billEmptySub: '右下角加号记一笔餐饮或购物',
     stat: {},
+    routeStat: { hasRoute: false, label: '', summaryText: '' },
     members: [],
     memberGroups: [],
     mapLat: 30.67,
@@ -234,8 +258,7 @@ Page({
     dayPickDays: [],
     dayShiftOpen: false,
     dayShiftDays: [],
-    dayShiftDelta: -1,
-    dayShiftPreview: '',
+    dayShiftDelta: 0,
     dayShiftBlocked: true,
     dayShiftHasPick: false,
     dayShiftBusy: false,
@@ -505,6 +528,9 @@ Page({
       ? withRoutes
       : (editing ? this.data.routesReady : true)
     const data = await api.planList(this.data.id, null, showRoute)
+    this._tripRouteStat = showRoute && data.route_stat && data.route_stat.items && data.route_stat.items.length
+      ? data.route_stat
+      : null
     const days = (data.days || []).map((d) => {
       const startHint = showRoute ? formatLegHint(d.start_distance_m, d.start_duration_s) : ''
       return {
@@ -544,6 +570,7 @@ Page({
       dayIndex: scope === 'all' ? -1 : dayIndex,
       currentDay: days[scope === 'all' ? Math.max(dayIndex, 0) : dayIndex] || { plans: [] },
       routesReady: editing ? this.scopeHasCachedRoutes() : showRoute,
+      routeStat: buildRouteStat(days, scope, scope === 'all' ? -1 : dayIndex, this._tripRouteStat),
     })
     this._plansLoaded = true
     if (!skipMap) await this.renderMap({ fit: plansChanged || !this._mapFitted })
@@ -552,7 +579,12 @@ Page({
     if (this.data.mapScope === 'all') return
     const cache = this._dayRoutes || {}
     const routesReady = (this.data.days || []).some((d) => (d.plans || []).length && cache[d.day_num])
-    this.setData({ mapScope: 'all', dayIndex: -1, routesReady })
+    this.setData({
+      mapScope: 'all',
+      dayIndex: -1,
+      routesReady,
+      routeStat: buildRouteStat(this.data.days, 'all', -1, this._tripRouteStat),
+    })
     this.renderMap({ fit: true })
     if (this.data.tab === 'bill') this.applyBillFilter()
   },
@@ -567,6 +599,7 @@ Page({
       dayIndex,
       currentDay: day,
       routesReady,
+      routeStat: buildRouteStat(this.data.days, 'day', dayIndex, this._tripRouteStat),
     })
     this.renderMap({ fit: true })
     if (this.data.tab === 'bill') this.applyBillFilter()
@@ -902,72 +935,57 @@ Page({
     })
     this.setData({
       dayShiftOpen: true,
-      dayShiftDelta: -1,
-      dayShiftDays,
       dayShiftBusy: false,
-      ...syncDayShiftPreview(days, dayShiftDays, -1),
+      ...syncDayShiftState(days, dayShiftDays, 0),
     })
   },
   closeDayShift() {
-    this.setData({ dayShiftOpen: false, dayShiftBusy: false })
+    this.setData({ dayShiftOpen: false, dayShiftBusy: false, dayShiftDelta: 0 })
   },
   onDayChipLongPress(e) {
     if (this.data.mode !== 'edit') return
     this.openDayShift(e)
-  },
-  setDayShiftSign(e) {
-    const sign = Number(e.currentTarget.dataset.v) || 1
-    const steps = Math.max(1, Math.abs(this.data.dayShiftDelta || 1))
-    const dayShiftDelta = sign < 0 ? -steps : steps
-    this.setData({
-      dayShiftDelta,
-      ...syncDayShiftPreview(this.data.days, this.data.dayShiftDays, dayShiftDelta),
-    })
-  },
-  bumpDayShiftSteps(e) {
-    const bump = Number(e.currentTarget.dataset.d) || 0
-    const sign = (this.data.dayShiftDelta || 1) < 0 ? -1 : 1
-    const steps = Math.min(5, Math.max(1, Math.abs(this.data.dayShiftDelta || 1) + bump))
-    const dayShiftDelta = sign * steps
-    this.setData({
-      dayShiftDelta,
-      ...syncDayShiftPreview(this.data.days, this.data.dayShiftDays, dayShiftDelta),
-    })
   },
   toggleDayShiftDay(e) {
     const dayNum = Number(e.currentTarget.dataset.day)
     const dayShiftDays = (this.data.dayShiftDays || []).map((d) => (
       d.day_num === dayNum ? { ...d, checked: !d.checked } : d
     ))
-    this.setData({
-      dayShiftDays,
-      ...syncDayShiftPreview(this.data.days, dayShiftDays, this.data.dayShiftDelta),
-    })
+    let delta = this.data.dayShiftDelta || 0
+    if (!canShiftTo(this.data.days, dayShiftDays, delta)) delta = 0
+    this.setData(syncDayShiftState(this.data.days, dayShiftDays, delta))
   },
-  pickDayShiftAll(e) {
-    const mode = e.currentTarget.dataset.mode
-    const dayShiftDays = (this.data.dayShiftDays || []).map((d) => ({
-      ...d,
-      checked: mode === 'all' ? true : mode === 'planned' ? d.hint !== '空天' : false,
-    }))
-    this.setData({
-      dayShiftDays,
-      ...syncDayShiftPreview(this.data.days, dayShiftDays, this.data.dayShiftDelta),
-    })
+  shiftDaysEarlier() {
+    if (!this.data.dayShiftHasPick) return
+    const next = (this.data.dayShiftDelta || 0) - 1
+    if (!canShiftTo(this.data.days, this.data.dayShiftDays, next)) {
+      const tip = shiftBlockedTip(this.data.days, this.data.dayShiftDays, next)
+      if (tip) wx.showToast({ title: tip, icon: 'none' })
+      return
+    }
+    this.setData(syncDayShiftState(this.data.days, this.data.dayShiftDays, next))
+  },
+  shiftDaysLater() {
+    if (!this.data.dayShiftHasPick) return
+    const next = (this.data.dayShiftDelta || 0) + 1
+    if (!canShiftTo(this.data.days, this.data.dayShiftDays, next)) {
+      const tip = shiftBlockedTip(this.data.days, this.data.dayShiftDays, next)
+      if (tip) wx.showToast({ title: tip, icon: 'none' })
+      return
+    }
+    this.setData(syncDayShiftState(this.data.days, this.data.dayShiftDays, next))
   },
   async applyDayShift() {
     if (this.data.dayShiftBusy || this.data.dayShiftBlocked) return
     const selected = (this.data.dayShiftDays || []).filter((d) => d.checked).map((d) => d.day_num)
-    if (!selected.length) {
-      wx.showToast({ title: '请选择要移动的天', icon: 'none' })
-      return
-    }
+    const delta = this.data.dayShiftDelta
+    if (!selected.length || !delta) return
     this.setData({ dayShiftBusy: true })
     wx.showLoading({ title: '移动中' })
     try {
       const res = await api.planShiftDays({
         travel_id: this.data.id,
-        delta: this.data.dayShiftDelta,
+        delta,
         day_nums: selected,
       })
       if (!res || !res.ok) {
@@ -975,15 +993,10 @@ Page({
           ? res.conflicts.map((c) => `D${c.day_num}：${c.message}`).join('；')
           : '无法移动'
         wx.showToast({ title: msg, icon: 'none', duration: 2800 })
-        if (res && res.conflicts) {
-          this.setData({
-            ...syncDayShiftPreview(this.data.days, this.data.dayShiftDays, this.data.dayShiftDelta),
-          })
-        }
         return
       }
       this._dayRoutes = {}
-      this.setData({ dayShiftOpen: false, routesReady: false })
+      this.setData({ dayShiftOpen: false, routesReady: false, dayShiftDelta: 0 })
       await this.loadPlans()
       wx.showToast({ title: '已移动', icon: 'success' })
     } finally {

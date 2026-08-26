@@ -135,10 +135,24 @@ pub struct DayVo {
 }
 
 #[derive(Serialize)]
+pub struct RouteModeStatVo {
+    pub traffic_type: String,
+    pub distance_m: i32,
+    pub duration_s: i32,
+}
+
+#[derive(Serialize)]
+pub struct RouteStatVo {
+    pub items: Vec<RouteModeStatVo>,
+}
+
+#[derive(Serialize)]
 pub struct PlanListVo {
     pub day_count: i32,
     pub start_date: String,
     pub days: Vec<DayVo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub route_stat: Option<RouteStatVo>,
 }
 
 #[derive(Serialize, Clone)]
@@ -188,6 +202,66 @@ pub fn to_vo(p: &PlanRow) -> PlanVo {
 
 fn same_stay(a: &PlanVo, b: &PlanVo) -> bool {
     a.place_name.trim() == b.place_name.trim()
+}
+
+fn normalize_leg_traffic(t: Option<&str>) -> &'static str {
+    match t.unwrap_or("drive") {
+        "walk" => "walk",
+        "drive" => "drive",
+        "bus" => "bus",
+        "highspeed" => "highspeed",
+        "train" => "train",
+        "plane" => "plane",
+        _ => "drive",
+    }
+}
+
+fn collect_route_stats(days: &[DayVo]) -> RouteStatVo {
+    use std::collections::HashMap;
+    const MODE_ORDER: [&str; 6] = ["drive", "bus", "walk", "highspeed", "train", "plane"];
+    let mut map: HashMap<&str, (i32, i32)> = HashMap::new();
+    for day in days {
+        if let Some(d) = day.start_distance_m.filter(|n| *n > 0) {
+            let t = normalize_leg_traffic(
+                day.plans
+                    .first()
+                    .and_then(|p| p.traffic_type.as_deref()),
+            );
+            let e = map.entry(t).or_insert((0, 0));
+            e.0 += d;
+            e.1 += day.start_duration_s.unwrap_or(0);
+        }
+        for p in &day.plans {
+            if let Some(d) = p.next_distance_m.filter(|n| *n > 0) {
+                let t = normalize_leg_traffic(p.traffic_type.as_deref());
+                let e = map.entry(t).or_insert((0, 0));
+                e.0 += d;
+                e.1 += p.next_duration_s.unwrap_or(0);
+            }
+        }
+    }
+    let mut items = Vec::new();
+    for mode in MODE_ORDER {
+        if let Some((distance_m, duration_s)) = map.remove(mode) {
+            if distance_m > 0 {
+                items.push(RouteModeStatVo {
+                    traffic_type: mode.into(),
+                    distance_m,
+                    duration_s,
+                });
+            }
+        }
+    }
+    for (mode, (distance_m, duration_s)) in map {
+        if distance_m > 0 {
+            items.push(RouteModeStatVo {
+                traffic_type: mode.into(),
+                distance_m,
+                duration_s,
+            });
+        }
+    }
+    RouteStatVo { items }
 }
 
 fn traffic_style(t: Option<&str>) -> (String, bool) {
@@ -530,10 +604,21 @@ pub async fn list(
         }
         prev_last = day_plans.last().cloned();
     }
+    let route_stat = if want_routes {
+        let stat = collect_route_stats(&days);
+        if stat.items.is_empty() {
+            None
+        } else {
+            Some(stat)
+        }
+    } else {
+        None
+    };
     Ok(ok(PlanListVo {
         day_count: total_days,
         start_date: t.start_date.to_string(),
         days,
+        route_stat,
     }))
 }
 

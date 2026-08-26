@@ -68,6 +68,78 @@ function formatDuration(durationS) {
   return min ? `约${h}小时${min}分` : `约${h}小时`
 }
 
+const ROUTE_MODE_ORDER = ['drive', 'bus', 'walk', 'highspeed', 'train', 'plane']
+
+function addRouteBucket(buckets, traffic, dist, dur) {
+  const d = Number(dist) || 0
+  if (d <= 0) return
+  const key = ROUTE_MODE_ORDER.includes(traffic) ? traffic : 'drive'
+  const cur = buckets[key] || { distance_m: 0, duration_s: 0 }
+  cur.distance_m += d
+  cur.duration_s += Number(dur) || 0
+  buckets[key] = cur
+}
+
+function routeItemsFromBuckets(buckets) {
+  const items = []
+  for (const key of ROUTE_MODE_ORDER) {
+    const b = buckets[key]
+    if (!b || b.distance_m <= 0) continue
+    items.push({
+      traffic_type: key,
+      label: trafficLabel(key),
+      distanceText: formatDistance(b.distance_m),
+    })
+  }
+  return items
+}
+
+function summarizeRouteLegsFromDays(days) {
+  const buckets = {}
+  for (const day of days || []) {
+    if (Number(day.start_distance_m) > 0) {
+      const t = (day.plans && day.plans[0] && day.plans[0].traffic_type) || 'drive'
+      addRouteBucket(buckets, t, day.start_distance_m, day.start_duration_s)
+    }
+    for (const p of day.plans || []) {
+      if (Number(p.next_distance_m) > 0) {
+        addRouteBucket(buckets, p.traffic_type || 'drive', p.next_distance_m, p.next_duration_s)
+      }
+    }
+  }
+  const items = routeItemsFromBuckets(buckets)
+  return {
+    hasRoute: items.length > 0,
+    items,
+    summaryText: items.map((i) => `${i.label} ${i.distanceText}`).join(' · '),
+  }
+}
+
+function summarizeRouteLegsFromApi(apiRouteStat) {
+  const buckets = {}
+  for (const row of (apiRouteStat && apiRouteStat.items) || []) {
+    addRouteBucket(buckets, row.traffic_type, row.distance_m, row.duration_s)
+  }
+  const items = routeItemsFromBuckets(buckets)
+  return {
+    hasRoute: items.length > 0,
+    items,
+    summaryText: items.map((i) => `${i.label} ${i.distanceText}`).join(' · '),
+  }
+}
+
+function buildRouteStatSummary(days, mapScope, dayIndex, apiRouteStat) {
+  if (mapScope === 'all' && apiRouteStat && apiRouteStat.items && apiRouteStat.items.length) {
+    return { label: '全程', ...summarizeRouteLegsFromApi(apiRouteStat) }
+  }
+  const list = mapScope === 'all' ? (days || []) : [(days || [])[dayIndex]].filter(Boolean)
+  const day = list[0]
+  return {
+    label: mapScope === 'all' ? '全程' : `D${(day && day.day_num) || ''}`,
+    ...summarizeRouteLegsFromDays(list),
+  }
+}
+
 function formatLegHint(distanceM, durationS) {
   const dist = formatDistance(distanceM)
   const time = formatDuration(durationS)
@@ -314,9 +386,11 @@ module.exports = {
   pointMeta,
   costLabel,
   trafficLabel,
+  formatDistance,
   formatDuration,
   formatLegHint,
   formatLegLabel,
+  buildRouteStatSummary,
   legDurationSeconds,
   withLegHints,
   linesToPolyline,
