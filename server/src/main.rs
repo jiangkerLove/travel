@@ -18,6 +18,7 @@ mod worklife;
 use std::env;
 
 use sqlx::postgres::PgPoolOptions;
+use sqlx::Executor;
 use tracing_subscriber::EnvFilter;
 
 use crate::state::AppState;
@@ -69,6 +70,13 @@ async fn main() {
     tracing::info!("connecting database...");
     let pool = PgPoolOptions::new()
         .max_connections(10)
+        .after_connect(|conn, _meta| {
+            Box::pin(async move {
+                // TIMESTAMP 无时区，NOW() 会按会话时区落成钟面时间
+                conn.execute("SET TIME ZONE 'Asia/Shanghai'").await?;
+                Ok(())
+            })
+        })
         .connect(&db_url)
         .await
         .unwrap_or_else(|e| {
