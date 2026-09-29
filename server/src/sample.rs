@@ -4,8 +4,13 @@ use sqlx::PgPool;
 
 use crate::{error::AppError, util::split_amount};
 
+/// 改案例内容时把版本号加一，已有的共用示例会按这份代码重建。
+pub const SAMPLE_VERSION: &str = "1";
+const SAMPLE_OWNER_OPEN_ID: &str = "sys_sample_owner";
+const DEV_SEED_INVITE: &str = "DEMO88";
+
 pub const SAMPLE_REMARK: &str =
-    "【示例攻略】成都出发，四姑娘山—丹巴—新都桥小环线。已结束示例，可看行程、账单与分账，不可编辑。";
+    "【示例攻略 v1】成都出发，四姑娘山—丹巴—新都桥小环线。已结束示例，可看行程、账单与分账，不可编辑。";
 
 pub fn is_sample_remark(remark: &Option<String>) -> bool {
     remark
@@ -17,90 +22,114 @@ pub fn should_grant_sample(open_id: &str) -> bool {
     !open_id.starts_with("demo_") && !open_id.starts_with("sys_guide_")
 }
 
-/// 无真实行程时准备一份已归档的只读示例；有进行中的真实行程后首页不再展示。
-pub async fn ensure_sample_travel(pool: &PgPool, user_id: i64) -> Result<(), AppError> {
-    // 统一为已归档只读，便于查看智能分账
-    sqlx::query(
-        r#"
-        UPDATE travel t
-        SET status = 2,
-            is_lock = TRUE,
-            remark = $2
-        FROM travel_member m
-        WHERE m.travel_id = t.id
-          AND m.user_id = $1
-          AND t.remark LIKE '【示例攻略】%'
-        "#,
-    )
-    .bind(user_id)
-    .bind(SAMPLE_REMARK)
-    .execute(pool)
-    .await?;
+/// 全站只保留一份只读示例。登录用户不是成员，只能预览。
+pub async fn ensure_sample_travel(pool: &PgPool, _user_id: i64) -> Result<(), AppError> {
+    if shared_sample_ready(pool).await? {
+        return Ok(());
+    }
 
-    sqlx::query(
+    let mut tx = pool.begin().await?;
+    sqlx::query("SELECT pg_advisory_xact_lock(820261001)")
+        .execute(&mut *tx)
+        .await?;
+    let owner = upsert_user(&mut tx, SAMPLE_OWNER_OPEN_ID, "小周").await?;
+    let current: Option<i64> = sqlx::query_scalar(
         r#"
-        UPDATE travel_member m
-        SET can_edit = FALSE, can_bill = FALSE
+        SELECT t.id
         FROM travel t
-        WHERE m.travel_id = t.id
-          AND t.remark LIKE '【示例攻略】%'
-          AND EXISTS (
-              SELECT 1 FROM travel_member x
-              WHERE x.travel_id = t.id AND x.user_id = $1
-          )
+        WHERE t.creator_id = $1
+          AND t.remark LIKE $2
+        ORDER BY t.id
+        LIMIT 1
         "#,
     )
-    .bind(user_id)
-    .execute(pool)
+    .bind(owner)
+    .bind(format!("【示例攻略 v{SAMPLE_VERSION}】%"))
+    .fetch_optional(&mut *tx)
     .await?;
+    let canonical = if let Some(id) = current {
+        id
+    } else {
+        let end = crate::util::shanghai_today() - Duration::days(7);
+        let start = end - Duration::days(3);
+        insert_sample(&mut tx, owner, None, Some("CHUANXI"), start, end).await?
+    };
+    sqlx::query(
+        r#"
+        DELETE FROM travel
+        WHERE remark LIKE '【示例攻略】%'
+          AND id <> $1
+          AND invite_code <> $2
+        "#,
+    )
+    .bind(canonical)
+    .bind(DEV_SEED_INVITE)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(())
+}
 
-    let has_sample: bool = sqlx::query_scalar(
+async fn shared_sample_ready(pool: &PgPool) -> Result<bool, AppError> {
+    let prefix = format!("【示例攻略 v{SAMPLE_VERSION}】%");
+    let ok: bool = sqlx::query_scalar(
         r#"
         SELECT EXISTS(
             SELECT 1
             FROM travel t
-            JOIN travel_member m ON m.travel_id = t.id
-            WHERE m.user_id = $1 AND t.remark LIKE '【示例攻略】%'
+            JOIN app_user u ON u.id = t.creator_id
+            WHERE u.open_id = $1
+              AND t.remark LIKE $2
+        )
+        AND NOT EXISTS(
+            SELECT 1
+            FROM travel t
+            WHERE t.remark LIKE '【示例攻略】%'
+              AND t.invite_code <> $3
+              AND NOT (
+                  t.remark LIKE $2
+                  AND EXISTS (
+                      SELECT 1 FROM app_user u
+                      WHERE u.id = t.creator_id AND u.open_id = $1
+                  )
+              )
         )
         "#,
     )
-    .bind(user_id)
+    .bind(SAMPLE_OWNER_OPEN_ID)
+    .bind(&prefix)
+    .bind(DEV_SEED_INVITE)
     .fetch_one(pool)
     .await?;
-    if has_sample {
-        return Ok(());
-    }
-
-    let active_real: i64 = sqlx::query_scalar(
-        r#"
-        SELECT COUNT(*)
-        FROM travel t
-        JOIN travel_member m ON m.travel_id = t.id
-        WHERE m.user_id = $1
-          AND t.status <> 2
-          AND (t.remark IS NULL OR t.remark NOT LIKE '【示例攻略】%')
-        "#,
-    )
-    .bind(user_id)
-    .fetch_one(pool)
-    .await?;
-    if active_real > 0 {
-        return Ok(());
-    }
-    create_sample_travel(pool, user_id, None, None).await?;
-    Ok(())
+    Ok(ok)
 }
 
-pub async fn create_sample_travel(
-    pool: &PgPool,
-    creator_id: i64,
-    companion_ids: Option<[i64; 2]>,
-    invite_code: Option<&str>,
-) -> Result<i64, AppError> {
-    // 已结束的四天行程，便于直接看账单与分账
-    let end = crate::util::shanghai_today() - Duration::days(7);
-    let start = end - Duration::days(3);
-    create_sample_travel_with_dates(pool, creator_id, companion_ids, invite_code, start, end).await
+pub async fn load_shared_sample(pool: &PgPool) -> Result<Option<(crate::db::TravelRow, i64)>, AppError> {
+    let prefix = format!("【示例攻略 v{SAMPLE_VERSION}】%");
+    let travel: Option<crate::db::TravelRow> = sqlx::query_as(
+        r#"
+        SELECT t.id, t.travel_name, t.destination, t.start_date, t.end_date, t.invite_code,
+               t.status, t.creator_id, t.is_lock, t.remark, t.cover
+        FROM travel t
+        JOIN app_user u ON u.id = t.creator_id
+        WHERE u.open_id = $1
+          AND t.remark LIKE $2
+        ORDER BY t.id
+        LIMIT 1
+        "#,
+    )
+    .bind(SAMPLE_OWNER_OPEN_ID)
+    .bind(&prefix)
+    .fetch_optional(pool)
+    .await?;
+    let Some(travel) = travel else {
+        return Ok(None);
+    };
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM travel_member WHERE travel_id = $1")
+        .bind(travel.id)
+        .fetch_one(pool)
+        .await?;
+    Ok(Some((travel, count)))
 }
 
 pub async fn create_sample_travel_with_dates(
@@ -112,16 +141,29 @@ pub async fn create_sample_travel_with_dates(
     end: NaiveDate,
 ) -> Result<i64, AppError> {
     let mut tx = pool.begin().await?;
+    let id = insert_sample(&mut tx, creator_id, companion_ids, invite_code, start, end).await?;
+    tx.commit().await?;
+    Ok(id)
+}
+
+async fn insert_sample(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    creator_id: i64,
+    companion_ids: Option<[i64; 2]>,
+    invite_code: Option<&str>,
+    start: NaiveDate,
+    end: NaiveDate,
+) -> Result<i64, AppError> {
     let mates = match companion_ids {
         Some(ids) => ids,
         None => [
-            upsert_user(&mut tx, "sys_guide_wei", "阿伟").await?,
-            upsert_user(&mut tx, "sys_guide_lin", "小林").await?,
+            upsert_user(tx, "sys_guide_wei", "阿伟").await?,
+            upsert_user(tx, "sys_guide_lin", "小林").await?,
         ],
     };
     let ids = [creator_id, mates[0], mates[1]];
 
-    let invite = unique_invite(&mut tx, invite_code).await?;
+    let invite = unique_invite(tx, invite_code).await?;
     let travel_id: i64 = sqlx::query_scalar(
         r#"
         INSERT INTO travel (travel_name, destination, start_date, end_date, invite_code, creator_id, remark, status, is_lock)
@@ -134,7 +176,7 @@ pub async fn create_sample_travel_with_dates(
     .bind(&invite)
     .bind(creator_id)
     .bind(SAMPLE_REMARK)
-    .fetch_one(&mut *tx)
+    .fetch_one(&mut **tx)
     .await?;
 
     for (i, uid) in ids.iter().enumerate() {
@@ -144,7 +186,7 @@ pub async fn create_sample_travel_with_dates(
         .bind(travel_id)
         .bind(uid)
         .bind(if i == 0 { 1_i16 } else { 0_i16 })
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
     }
 
@@ -331,7 +373,7 @@ pub async fn create_sample_travel_with_dates(
         .bind(p.traffic)
         .bind(p.sort)
         .bind(p.remark)
-        .fetch_one(&mut *tx)
+        .fetch_one(&mut **tx)
         .await?;
         plan_ids.push(id);
     }
@@ -424,7 +466,7 @@ pub async fn create_sample_travel_with_dates(
         .bind(consume)
         .bind(b.visible_all)
         .bind(b.remark)
-        .fetch_one(&mut *tx)
+        .fetch_one(&mut **tx)
         .await?;
 
         if b.visible_all {
@@ -434,13 +476,12 @@ pub async fn create_sample_travel_with_dates(
                     .bind(bill_id)
                     .bind(uid)
                     .bind(parts[i])
-                    .execute(&mut *tx)
+                    .execute(&mut **tx)
                     .await?;
             }
         }
     }
 
-    tx.commit().await?;
     Ok(travel_id)
 }
 

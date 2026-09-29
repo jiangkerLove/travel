@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     db::{
-        display_status, find_travel, list_members, require_leader, require_member, status_text, MemberRow,
+        display_status, find_travel, list_members, require_leader, require_member, require_viewer,
+        status_text, MemberRow,
         TravelRow,
     },
     error::{ok, ApiOk, AppError},
@@ -389,6 +390,7 @@ pub async fn list(
     Query(q): Query<ListQ>,
 ) -> Result<Json<ApiOk<Vec<TravelVo>>>, AppError> {
     let archived = q.archived.unwrap_or(false);
+    crate::sample::ensure_sample_travel(&state.pool, user.id).await?;
     let rows: Vec<TravelListRow> = if archived {
         // 归档列表：含已结束的示例攻略
         sqlx::query_as(
@@ -446,6 +448,28 @@ pub async fn list(
         .fetch_all(&state.pool)
         .await?
     };
+
+    let has_active_real = rows.iter().any(|r| {
+        r.travel.status != 2 && !crate::sample::is_sample_remark(&r.travel.remark)
+    });
+    let has_sample = rows.iter().any(|r| crate::sample::is_sample_remark(&r.travel.remark));
+    let mut rows = rows;
+    if (archived || !has_active_real) && !has_sample {
+        if let Some((travel, member_count)) = crate::sample::load_shared_sample(&state.pool).await? {
+            let row = TravelListRow {
+                travel,
+                member_count,
+                role: 0,
+                can_edit: false,
+                can_bill: false,
+            };
+            if archived {
+                rows.insert(0, row);
+            } else {
+                rows.push(row);
+            }
+        }
+    }
 
     let ids: Vec<i64> = rows
         .iter()
@@ -553,7 +577,7 @@ pub async fn detail(
     user: AuthUser,
     Query(q): Query<DetailQ>,
 ) -> Result<Json<ApiOk<TravelVo>>, AppError> {
-    let m = require_member(&state.pool, q.id, user.id).await?;
+    let m = require_viewer(&state.pool, q.id, user.id).await?;
     let t = find_travel(&state.pool, q.id).await?;
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM travel_member WHERE travel_id = $1")
         .bind(q.id)
@@ -612,7 +636,7 @@ pub async fn member(
     user: AuthUser,
     Query(q): Query<TravelIdReq>,
 ) -> Result<Json<ApiOk<Vec<MemberVo>>>, AppError> {
-    require_member(&state.pool, q.travel_id, user.id).await?;
+    require_viewer(&state.pool, q.travel_id, user.id).await?;
     let list = list_members(&state.pool, q.travel_id).await?;
     Ok(ok(list.iter().map(member_vo).collect()))
 }

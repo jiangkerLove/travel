@@ -10,7 +10,7 @@ use crate::{
     ai_log::{list_ai_plan_logs, AiDraftLogCtx},
     db::{
         clear_travel_route_cache, find_travel, invalidate_route_cache, list_plans, load_route_cache,
-        require_editor, require_member, save_route_cache, PlanRow,
+        require_editor, require_viewer, save_route_cache, PlanRow,
     },
     error::{ok, ApiOk, AppError},
     route::{plan_route, LatLng},
@@ -516,7 +516,7 @@ pub async fn list(
     user: AuthUser,
     Query(q): Query<ListQ>,
 ) -> Result<Json<ApiOk<PlanListVo>>, AppError> {
-    require_member(&state.pool, q.travel_id, user.id).await?;
+    require_viewer(&state.pool, q.travel_id, user.id).await?;
     let t = find_travel(&state.pool, q.travel_id).await?;
     let total_days = day_count(t.start_date, t.end_date);
     let plans = list_plans(&state.pool, q.travel_id, None).await?;
@@ -1077,7 +1077,7 @@ pub async fn map_global(
     user: AuthUser,
     Query(q): Query<ListQ>,
 ) -> Result<Json<ApiOk<MapVo>>, AppError> {
-    require_member(&state.pool, q.travel_id, user.id).await?;
+    require_viewer(&state.pool, q.travel_id, user.id).await?;
     let plans = list_plans(&state.pool, q.travel_id, None).await?;
     let points: Vec<PlanVo> = plans.iter().map(to_vo).collect();
     let cache_only = q.cache_only.unwrap_or(0) != 0;
@@ -1101,7 +1101,7 @@ pub async fn map_day(
     let day = q
         .day_num
         .ok_or_else(|| AppError::BadRequest("缺少 day_num".into()))?;
-    require_member(&state.pool, q.travel_id, user.id).await?;
+    require_viewer(&state.pool, q.travel_id, user.id).await?;
     let plans = list_plans(&state.pool, q.travel_id, Some(day)).await?;
     let mut points: Vec<PlanVo> = plans.iter().map(to_vo).collect();
 

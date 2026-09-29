@@ -6,7 +6,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    db::{find_travel, list_members, require_biller, require_member},
+    db::{find_travel, list_members, require_biller, require_member, require_viewer},
     error::{ok, ApiOk, AppError},
     settle::{calc_group_settle, calc_transfers, MemberBalance},
     state::{AppState, AuthUser},
@@ -309,7 +309,7 @@ pub async fn list(
     user: AuthUser,
     Query(q): Query<ListQ>,
 ) -> Result<Json<ApiOk<Vec<BillVo>>>, AppError> {
-    require_member(&state.pool, q.travel_id, user.id).await?;
+    require_viewer(&state.pool, q.travel_id, user.id).await?;
     let rows: Vec<BillRow> = sqlx::query_as(
         r#"
         SELECT b.id, b.travel_id, b.day_plan_id, b.bill_name, b.amount, b.bill_type, b.cost_type,
@@ -380,7 +380,7 @@ pub async fn stat(
     user: AuthUser,
     Query(q): Query<ListQ>,
 ) -> Result<Json<ApiOk<StatVo>>, AppError> {
-    require_member(&state.pool, q.travel_id, user.id).await?;
+    require_viewer(&state.pool, q.travel_id, user.id).await?;
     let member_count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM travel_member WHERE travel_id=$1")
             .bind(q.travel_id)
@@ -456,7 +456,7 @@ pub async fn settle_calc(
     user: AuthUser,
     Query(q): Query<ListQ>,
 ) -> Result<Json<ApiOk<serde_json::Value>>, AppError> {
-    require_member(&state.pool, q.travel_id, user.id).await?;
+    require_viewer(&state.pool, q.travel_id, user.id).await?;
     let t = find_travel(&state.pool, q.travel_id).await?;
     let members = list_members(&state.pool, q.travel_id).await?;
     let paid_rows: Vec<(i64, Decimal)> = sqlx::query_as(

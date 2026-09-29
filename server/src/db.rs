@@ -80,6 +80,30 @@ pub async fn find_user(pool: &PgPool, id: i64) -> Result<UserRow, AppError> {
     .ok_or_else(|| AppError::Unauthorized("用户不存在".into()))
 }
 
+/// 成员可看自己的旅途；共用示例对所有登录用户只读开放。
+pub async fn require_viewer(pool: &PgPool, travel_id: i64, user_id: i64) -> Result<MemberRow, AppError> {
+    if let Ok(m) = require_member(pool, travel_id, user_id).await {
+        return Ok(m);
+    }
+    let t = find_travel(pool, travel_id).await?;
+    if !crate::sample::is_sample_remark(&t.remark) {
+        return Err(AppError::Forbidden("你不是该旅途成员".into()));
+    }
+    let u = find_user(pool, user_id).await?;
+    Ok(MemberRow {
+        id: 0,
+        travel_id,
+        user_id,
+        role: 0,
+        can_edit: false,
+        can_bill: false,
+        group_name: None,
+        nickname: u.nickname,
+        avatar: u.avatar,
+        open_id: u.open_id,
+    })
+}
+
 pub async fn require_member(pool: &PgPool, travel_id: i64, user_id: i64) -> Result<MemberRow, AppError> {
     sqlx::query_as::<_, MemberRow>(
         r#"
