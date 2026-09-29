@@ -5,9 +5,8 @@ use chrono::{Datelike, NaiveDate};
 
 use crate::{
     auth::make_token,
-    db::{find_user, USER_COLS},
     client::ClientInfo,
-    db::find_user,
+    db::{find_user, USER_COLS},
     error::{ok, ApiOk, AppError},
     state::{AppState, AuthUser},
 };
