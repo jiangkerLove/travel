@@ -45,11 +45,7 @@ const api = {
     if (cacheOnly) url += '&cache_only=1'
     return request({ url, timeout: 25000 })
   },
-  mapSearch: (q, lng, lat) => {
-    let url = `/api/map/search?q=${encodeURIComponent(q || '')}`
-    if (lng && lat) url += `&lng=${lng}&lat=${lat}`
-    return request({ url })
-  },
+  mapSearch: (q) => request({ url: `/api/map/search?q=${encodeURIComponent(q || '')}` }),
   mapRegeo: (lng, lat) => request({ url: `/api/map/regeo?lng=${lng}&lat=${lat}` }),
 
   billList: (travel_id) => request({ url: `/api/bill/list?travel_id=${travel_id}` }),

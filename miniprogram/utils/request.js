@@ -1,4 +1,13 @@
-const { baseUrl } = require('./config')
+const { baseUrl, version } = require('./config')
+
+function appEnv() {
+  try {
+    const info = wx.getAccountInfoSync()
+    return (info && info.miniProgram && info.miniProgram.envVersion) || ''
+  } catch (e) {
+    return ''
+  }
+}
 
 function errMessage(res) {
   return (res && res.data && res.data.message) || '请求失败'
@@ -14,6 +23,8 @@ function request({ url, method = 'GET', data, skipAuth = false, quiet = false, t
       timeout,
       header: {
         'content-type': 'application/json',
+        'X-App-Version': version,
+        'X-App-Env': appEnv(),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       success(res) {

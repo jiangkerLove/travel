@@ -61,13 +61,6 @@ Page({
     wx.setNavigationBarTitle({
       title: q.id ? '编辑地点' : '添加地点',
     })
-    wx.getLocation({
-      type: 'gcj02',
-      success: (r) => {
-        this._aroundLng = r.longitude
-        this._aroundLat = r.latitude
-      },
-    })
 
     // 优先用旅途页已有数据，避免进页再刷接口闪一下
     try {
@@ -221,7 +214,7 @@ Page({
     const seq = ++this._seq
     this.setData({ searching: true, emptyHint: false })
     try {
-      const pois = (await api.mapSearch(q, this._aroundLng, this._aroundLat)) || []
+      const pois = (await api.mapSearch(q)) || []
       if (seq !== this._seq) return
       this.setData({
         pois,

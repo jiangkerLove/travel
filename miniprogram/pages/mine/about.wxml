@@ -1,7 +1,7 @@
 <view class="about-page">
   <image class="mark" src="/images/brand-mark.png" mode="aspectFit" />
   <view class="name">旅途计划</view>
-  <view class="ver">版本 1.0.0</view>
+  <view class="ver">版本 {{version}}</view>
 
   <view class="card">
     <view class="p">

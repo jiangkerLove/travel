@@ -72,12 +72,6 @@
     "t-navbar": "tdesign-miniprogram/navbar/navbar",
     "t-message": "tdesign-miniprogram/message/message"
   },
-  "permission": {
-    "scope.userLocation": {
-      "desc": "用于选择行程地点并在地图上展示路线"
-    }
-  },
-  "requiredPrivateInfos": ["chooseLocation", "getLocation"],
   "lazyCodeLoading": "requiredComponents",
   "sitemapLocation": "sitemap.json"
 }
