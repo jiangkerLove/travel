@@ -277,18 +277,22 @@ function toMarkers(points, opts) {
   const lines = (opts && opts.lines) || []
   const startHint = (opts && opts.startHint) || ''
   const showLegs = !!(opts && opts.showLegs)
+  const showName = !opts || opts.showName !== false
   const geoList = spreadOverlappingPoints(points)
   const placeMarkers = geoList.map((p, i) => {
     const name = String(p.place_name || p.name || '').trim()
     const short = name.length > 10 ? `${name.slice(0, 10)}…` : name
     const isStart = !!(p.isStart || (markStart && i === 0))
-    let content = short ? `${i + 1}. ${short}` : String(i + 1)
-    if (isStart) content = short ? `起点 · ${short}` : '起点'
+    const linesText = []
+    if (showName) {
+      if (isStart) linesText.push(short ? `起点 · ${short}` : '起点')
+      else linesText.push(short ? `${i + 1}. ${short}` : String(i + 1))
+    }
     if (showLegs) {
       const leg = arrivalLegText(geoList, i, lines, startHint)
-      if (leg) content = `${content}\n${leg}`
+      if (leg) linesText.push(leg)
     }
-    return {
+    const marker = {
       id: Number(p.id) || i + 1,
       latitude: Number(p.latitude),
       longitude: Number(p.longitude),
@@ -296,8 +300,10 @@ function toMarkers(points, opts) {
       height: isStart ? 42 : 34,
       anchor: { x: 0.5, y: 1 },
       zIndex: isStart ? 99 : i + 1,
-      callout: {
-        content,
+    }
+    if (linesText.length) {
+      marker.callout = {
+        content: linesText.join('\n'),
         display: 'ALWAYS',
         padding: 6,
         borderRadius: 8,
@@ -307,8 +313,9 @@ function toMarkers(points, opts) {
         borderWidth: 1,
         borderColor: isStart ? '#5d8a76' : '#d7e4dc',
         textAlign: 'center',
-      },
+      }
     }
+    return marker
   })
 
   return placeMarkers

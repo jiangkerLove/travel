@@ -233,6 +233,8 @@ Page({
     markers: [],
     polyline: [],
     mapExpanded: false,
+    showMapName: true,
+    showMapTime: true,
     mapHeight: 210,
     dragIndex: -1,
     canEdit: false,
@@ -667,24 +669,39 @@ Page({
     }
     tick()
   },
-  applyMapMarkers(showLegs = this.data.mapExpanded) {
+  markerLabelOpts() {
+    const expanded = !!this.data.mapExpanded
+    return {
+      showLegs: expanded && this.data.showMapTime !== false,
+      showName: !expanded || this.data.showMapName !== false,
+    }
+  },
+  applyMapMarkers() {
     const cache = this._mapCache
     if (!cache || !cache.points) return
     const markers = toMarkers(cache.points, {
       markStart: cache.markStart,
       lines: cache.lines,
       startHint: cache.startHint || '',
-      showLegs,
+      ...this.markerLabelOpts(),
     })
     cache.markers = markers
     this._mapDrawKey = ''
     this.setMapView(markers, cache.polyline)
   },
+  toggleMapName() {
+    this.setData({ showMapName: !this.data.showMapName })
+    this.applyMapMarkers()
+  },
+  toggleMapTime() {
+    this.setData({ showMapTime: !this.data.showMapTime })
+    this.applyMapMarkers()
+  },
   toggleMapFull() {
     const mapExpanded = !this.data.mapExpanded
     const mapHeight = mapExpanded ? this.expandedMapHeight() : this.collapsedMapHeight()
     this.setData({ mapExpanded })
-    this.applyMapMarkers(mapExpanded)
+    this.applyMapMarkers()
     this.animateMapHeight(mapHeight, 420)
     if (this._fitDelay) clearTimeout(this._fitDelay)
     this._fitDelay = setTimeout(() => {
@@ -710,7 +727,7 @@ Page({
           markStart,
           lines: filled.lines,
           startHint,
-          showLegs: this.data.mapExpanded,
+          ...this.markerLabelOpts(),
         })
         const polyline = linesToPolyline(filled.lines, acc.points)
         const cacheKey = `edit:${scope}:${acc.points.map((p) => p.id).join(',')}`
@@ -759,13 +776,13 @@ Page({
 
     if (this._mapCache && this._mapCache.key === cacheKey) {
       if (seq !== this._mapSeq) return
-      this.applyMapMarkers(this.data.mapExpanded)
+      this.applyMapMarkers()
       if (fit) this.fitMap(this._mapCache.points)
       return
     }
 
     if (!withLines) {
-      const markers = toMarkers(localGeo, { markStart })
+      const markers = toMarkers(localGeo, { markStart, ...this.markerLabelOpts() })
       this._mapCache = { key: cacheKey, markers, polyline: [], points: localGeo, lines: [], markStart, startHint: '' }
       this.setMapView(markers, [])
       if (fit) this.fitMap(localGeo)
@@ -807,7 +824,7 @@ Page({
         markStart,
         lines,
         startHint,
-        showLegs: this.data.mapExpanded,
+        ...this.markerLabelOpts(),
       })
       const polyline = linesToPolyline(lines, points)
       this._mapCache = { key: cacheKey, markers, polyline, points, lines, markStart, startHint }
@@ -816,7 +833,7 @@ Page({
       if (fit) this.fitMap(points)
     } catch (e) {
       if (seq !== this._mapSeq) return
-      const markers = toMarkers(localGeo, { markStart })
+      const markers = toMarkers(localGeo, { markStart, ...this.markerLabelOpts() })
       this._mapCache = { key: cacheKey, markers, polyline: [], points: localGeo, lines: [], markStart, startHint: '' }
       this.setMapView(markers, [])
       if (fit) this.fitMap(localGeo)
@@ -1166,7 +1183,7 @@ Page({
     const markers = toMarkers(acc.points, {
       markStart: true,
       lines: acc.lines,
-      showLegs: this.data.mapExpanded,
+      ...this.markerLabelOpts(),
     })
     const polyline = linesToPolyline(acc.lines, acc.points)
     this._mapCache = {
@@ -1233,7 +1250,7 @@ Page({
         markStart: true,
         lines: filled.lines,
         startHint,
-        showLegs: this.data.mapExpanded,
+        ...this.markerLabelOpts(),
       })
       const polyline = linesToPolyline(filled.lines, points)
       this._mapCache = {
@@ -1574,6 +1591,10 @@ Page({
     }
 
     const round2 = (n) => Math.round(n * 100) / 100
+    const myPrepaid = round2(scoped.reduce((sum, b) => {
+      if (Number(b.pay_user_id) !== userId || Number(b.bill_type) === 2) return sum
+      return sum + (Number(b.amount) || 0)
+    }, 0))
     const myCostOf = (b) => {
       if (b.shares && b.shares.length) {
         const share = b.shares.find((s) => Number(s.user_id) === userId)
@@ -1589,7 +1610,7 @@ Page({
       return b.bill_type === 2 && Number(b.pay_user_id) === userId
     }
 
-    let stat = tripStat
+    let stat = { ...tripStat, my_prepaid: myPrepaid }
     if (date) {
       let public_total = 0
       let private_total = 0
@@ -1606,6 +1627,7 @@ Page({
       stat = {
         public_total: round2(public_total),
         private_total: round2(private_total),
+        my_prepaid: myPrepaid,
         avg_public: round2(public_total / mc),
         member_count: mc,
         categories: Object.keys(catMap).map((cost_type) => ({

@@ -33,6 +33,22 @@
         enable-building="{{true}}"
         bindmarkertap="onMarker"
       />
+      <view class="map-toggles" wx:if="{{mapExpanded}}">
+        <view
+          class="map-toggle {{showMapName ? 'on' : ''}}"
+          catch:tap="toggleMapName"
+        >
+          <view class="map-tick">{{showMapName ? '✓' : ''}}</view>
+          <text>地名</text>
+        </view>
+        <view
+          class="map-toggle {{showMapTime ? 'on' : ''}}"
+          catch:tap="toggleMapTime"
+        >
+          <view class="map-tick">{{showMapTime ? '✓' : ''}}</view>
+          <text>时间</text>
+        </view>
+      </view>
       <view class="map-fab" catch:tap="toggleMapFull">
         <t-icon
           name="{{mapExpanded ? 'fullscreen-exit' : 'fullscreen-2'}}"
@@ -195,6 +211,10 @@
             <view class="stat-k">我的花销</view>
             <view class="stat-v">¥{{stat.private_total || 0}}</view>
           </view>
+        </view>
+        <view class="prepaid-row" wx:if="{{!trip.is_sample && trip.status !== 2}}">
+          <text class="prepaid-k">我已预付{{billScope && billScope !== '全程' ? ' · ' + billScope : ''}}</text>
+          <text class="prepaid-v">¥{{stat.my_prepaid || 0}}</text>
         </view>
         <view class="settle-entry" wx:if="{{mapScope === 'all' && trip.status === 2}}" bind:tap="goSettle">
           <view>
