@@ -121,6 +121,5 @@
     </view>
 
     <view class="save-btn" bind:tap="submit">{{isEdit ? '保存' : '加入行程'}}</view>
-    <view class="del-btn" wx:if="{{isEdit}}" bind:tap="remove">删除</view>
   </view>
 </view>

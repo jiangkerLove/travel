@@ -331,6 +331,7 @@ async fn fetch_amap(
         url.push_str("&sig=");
         url.push_str(&amap_sig(&query, secret));
     }
+    crate::poi::throttle_amap(&format!("/v5/direction/{mode}")).await;
     let resp = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(4))
         .build()

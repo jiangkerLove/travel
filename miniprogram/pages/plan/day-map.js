@@ -14,7 +14,7 @@ Page({
     const filled = fillLineRoutes(data.lines || [], points)
     const withHints = withLegHints(points, filled.lines)
     const withGeo = withHints.filter((p) => p.latitude && p.longitude)
-    const markers = toMarkers(withGeo)
+    const markers = toMarkers(withGeo, { lines: filled.lines, markStart: !!withGeo[0] })
     const polyline = linesToPolyline(filled.lines || [], withHints)
     const includePoints = withGeo.map((p) => ({ latitude: p.latitude, longitude: p.longitude }))
     const c = withGeo[0] || { latitude: 30.67, longitude: 104.06 }
@@ -38,7 +38,8 @@ Page({
     }
   },
   onMarker(e) {
-    const p = this.data.points.find((i) => i.id === e.detail.markerId)
+    const markerId = e.detail.markerId
+    const p = this.data.points.find((i) => i.id === markerId)
     if (p) openMap(p)
   },
   openPlace(e) {

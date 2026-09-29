@@ -18,14 +18,14 @@
   ],
   "window": {
     "navigationBarTitleText": "旅途计划",
-    "navigationBarBackgroundColor": "#F5F7FB",
+    "navigationBarBackgroundColor": "#F4F9F6",
     "navigationBarTextStyle": "black",
-    "backgroundColor": "#F5F7FB",
+    "backgroundColor": "#F4F9F6",
     "backgroundTextStyle": "dark"
   },
   "tabBar": {
-    "color": "#8B8B8B",
-    "selectedColor": "#0052D9",
+    "color": "#93A39B",
+    "selectedColor": "#4F9F8A",
     "backgroundColor": "#ffffff",
     "borderStyle": "white",
     "list": [

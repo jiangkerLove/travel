@@ -2,7 +2,7 @@
   <view class="hero">
     <image class="mark" src="/images/brand-mark.png" mode="aspectFit" />
     <view class="brand">旅途计划</view>
-    <view class="tagline">把路线和账单，一起理清楚</view>
+    <view class="tagline">下一趟，从这里出发</view>
   </view>
 
   <view class="panel">

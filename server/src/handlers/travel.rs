@@ -21,6 +21,7 @@ pub struct CreateReq {
     pub start_date: String,
     pub end_date: String,
     pub remark: Option<String>,
+    pub cover: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -42,6 +43,9 @@ pub struct TravelVo {
     pub can_edit: bool,
     pub can_bill: bool,
     pub day_count: i32,
+    pub countdown: String,
+    pub cover: String,
+    pub route_svg: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -122,6 +126,30 @@ fn to_vo(t: &TravelRow, member_count: i64, role: i16, can_edit: bool, can_bill: 
         can_edit: !read_only && (role == 1 || can_edit),
         can_bill: !read_only && (role == 1 || can_bill),
         day_count: day_count(t.start_date, t.end_date),
+        countdown: crate::worklife::trip_countdown(
+            t.start_date,
+            t.end_date,
+            crate::util::shanghai_today(),
+        ),
+        cover: normalize_cover(Some(&t.cover)),
+        route_svg: None,
+    }
+}
+
+const COVER_KEYS: &[&str] = &[
+    "route", "mountain", "beach", "island", "city", "forest", "desert", "temple", "lake", "snow",
+    "balloon",
+];
+
+fn normalize_cover(raw: Option<&str>) -> String {
+    let s = raw.unwrap_or("").trim();
+    if s.is_empty() {
+        return "route".into();
+    }
+    if COVER_KEYS.contains(&s) {
+        s.to_string()
+    } else {
+        "route".into()
     }
 }
 
@@ -196,10 +224,10 @@ pub async fn create(
 
     let travel: TravelRow = sqlx::query_as(
         r#"
-        INSERT INTO travel (travel_name, destination, start_date, end_date, invite_code, creator_id, remark)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        INSERT INTO travel (travel_name, destination, start_date, end_date, invite_code, creator_id, remark, cover)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         RETURNING id, travel_name, destination, start_date, end_date, invite_code,
-                  status, creator_id, is_lock, remark
+                  status, creator_id, is_lock, remark, cover
         "#,
     )
     .bind(name)
@@ -209,6 +237,7 @@ pub async fn create(
     .bind(&invite)
     .bind(user.id)
     .bind(req.remark.as_deref())
+    .bind(normalize_cover(req.cover.as_deref()))
     .fetch_one(&mut *tx)
     .await?;
 
@@ -230,6 +259,9 @@ pub struct UpdateReq {
     pub start_date: Option<String>,
     pub end_date: Option<String>,
     pub remark: Option<String>,
+    pub cover: Option<String>,
+    /// 改开始日时：`shift` 整体平移行程；`preserve` 保留原公历日期
+    pub date_shift_mode: Option<String>,
 }
 
 /// 团长修改旅途信息 / 日期；缩短日期时删除超出天数的行程点
@@ -282,7 +314,27 @@ pub async fn update(
         return Err(AppError::BadRequest("行程请控制在 60 天以内".into()));
     }
 
+    let start_delta = (start - t.start_date).num_days();
+    let end_delta = (end - t.end_date).num_days();
+    let preserve_calendar = req
+        .date_shift_mode
+        .as_deref()
+        .map(|s| s.trim().eq_ignore_ascii_case("preserve"))
+        .unwrap_or(false);
+
     let mut tx = state.pool.begin().await?;
+    // 仅改开始日、或起止不同步移动且选择保留原日历时：按公历保留各天行程（可空出开头）
+    if preserve_calendar && start_delta != 0 && start_delta != end_delta {
+        sqlx::query("UPDATE day_plan SET day_num = day_num - $1 WHERE travel_id = $2")
+            .bind(start_delta as i32)
+            .bind(req.travel_id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM day_plan WHERE travel_id = $1 AND day_num < 1")
+            .bind(req.travel_id)
+            .execute(&mut *tx)
+            .await?;
+    }
     // 缩短行程：清掉超出天数的点位（账单上的绑定会置空）
     sqlx::query("DELETE FROM day_plan WHERE travel_id = $1 AND day_num > $2")
         .bind(req.travel_id)
@@ -294,6 +346,10 @@ pub async fn update(
         Some(s) => Some(s.trim()).filter(|x| !x.is_empty()).map(|s| s.to_string()),
         None => t.remark.clone(),
     };
+    let cover = match &req.cover {
+        Some(s) => normalize_cover(Some(s)),
+        None => normalize_cover(Some(&t.cover)),
+    };
 
     let travel: TravelRow = sqlx::query_as(
         r#"
@@ -302,10 +358,11 @@ pub async fn update(
             destination = $3,
             start_date = $4,
             end_date = $5,
-            remark = $6
+            remark = $6,
+            cover = $7
         WHERE id = $1
         RETURNING id, travel_name, destination, start_date, end_date, invite_code,
-                  status, creator_id, is_lock, remark
+                  status, creator_id, is_lock, remark, cover
         "#,
     )
     .bind(req.travel_id)
@@ -314,6 +371,7 @@ pub async fn update(
     .bind(start)
     .bind(end)
     .bind(remark.as_deref())
+    .bind(&cover)
     .fetch_one(&mut *tx)
     .await?;
     tx.commit().await?;
@@ -336,7 +394,7 @@ pub async fn list(
         sqlx::query_as(
             r#"
             SELECT t.id, t.travel_name, t.destination, t.start_date, t.end_date, t.invite_code,
-                   t.status, t.creator_id, t.is_lock, t.remark,
+                   t.status, t.creator_id, t.is_lock, t.remark, t.cover,
                    (SELECT COUNT(*) FROM travel_member m2 WHERE m2.travel_id = t.id) AS member_count,
                    m.role, m.can_edit, m.can_bill
             FROM travel t
@@ -356,7 +414,7 @@ pub async fn list(
         sqlx::query_as(
             r#"
             SELECT t.id, t.travel_name, t.destination, t.start_date, t.end_date, t.invite_code,
-                   t.status, t.creator_id, t.is_lock, t.remark,
+                   t.status, t.creator_id, t.is_lock, t.remark, t.cover,
                    (SELECT COUNT(*) FROM travel_member m2 WHERE m2.travel_id = t.id) AS member_count,
                    m.role, m.can_edit, m.can_bill
             FROM travel t
@@ -389,10 +447,105 @@ pub async fn list(
         .await?
     };
 
+    let ids: Vec<i64> = rows
+        .iter()
+        .filter(|r| normalize_cover(Some(&r.travel.cover)) == "route")
+        .map(|r| r.travel.id)
+        .collect();
+    let thumbs = load_route_thumbs(&state.pool, &ids).await;
     Ok(ok(rows
         .into_iter()
-        .map(|r| to_vo(&r.travel, r.member_count, r.role, r.can_edit, r.can_bill))
+        .map(|r| {
+            let mut vo = to_vo(&r.travel, r.member_count, r.role, r.can_edit, r.can_bill);
+            vo.route_svg = thumbs.get(&r.travel.id).cloned();
+            vo
+        })
         .collect()))
+}
+
+#[derive(sqlx::FromRow)]
+struct RoutePtRow {
+    id: i64,
+    travel_id: i64,
+    latitude: rust_decimal::Decimal,
+    longitude: rust_decimal::Decimal,
+}
+
+#[derive(sqlx::FromRow)]
+struct RouteLegRow {
+    travel_id: i64,
+    from_plan_id: i64,
+    to_plan_id: i64,
+    points: sqlx::types::Json<Vec<crate::route::LatLng>>,
+}
+
+async fn load_route_thumbs(
+    pool: &sqlx::PgPool,
+    ids: &[i64],
+) -> std::collections::HashMap<i64, String> {
+    let mut map = std::collections::HashMap::new();
+    if ids.is_empty() {
+        return map;
+    }
+    let rows: Vec<RoutePtRow> = match sqlx::query_as(
+        r#"
+        SELECT id, travel_id, latitude, longitude
+        FROM day_plan
+        WHERE travel_id = ANY($1)
+          AND latitude IS NOT NULL
+          AND longitude IS NOT NULL
+        ORDER BY travel_id, day_num ASC, sort ASC, id ASC
+        "#,
+    )
+    .bind(ids)
+    .fetch_all(pool)
+    .await
+    {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!("读取路线缩略点失败: {e}");
+            return map;
+        }
+    };
+    let legs: Vec<RouteLegRow> = sqlx::query_as(
+        r#"
+        SELECT p.travel_id, c.from_plan_id, c.to_plan_id, c.points
+        FROM route_cache c
+        JOIN day_plan p ON p.id = c.from_plan_id
+        WHERE p.travel_id = ANY($1)
+        "#,
+    )
+    .bind(ids)
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+
+    let mut grouped: std::collections::HashMap<i64, Vec<(i64, f64, f64)>> =
+        std::collections::HashMap::new();
+    for r in rows {
+        if let (Some(lat), Some(lng)) = (
+            crate::util::opt_coord_to_f64(Some(r.latitude)),
+            crate::util::opt_coord_to_f64(Some(r.longitude)),
+        ) {
+            grouped.entry(r.travel_id).or_default().push((r.id, lat, lng));
+        }
+    }
+    let mut legs_by_travel: std::collections::HashMap<i64, Vec<(i64, i64, Vec<crate::route::LatLng>)>> =
+        std::collections::HashMap::new();
+    for leg in legs {
+        legs_by_travel
+            .entry(leg.travel_id)
+            .or_default()
+            .push((leg.from_plan_id, leg.to_plan_id, leg.points.0));
+    }
+    for (id, stops) in grouped {
+        let coords: Vec<(f64, f64)> = stops.iter().map(|s| (s.1, s.2)).collect();
+        let path = crate::route_thumb::stitch_path(&stops, legs_by_travel.get(&id).unwrap_or(&vec![]));
+        if let Some(svg) = crate::route_thumb::from_trip(&coords, &path) {
+            map.insert(id, svg);
+        }
+    }
+    map
 }
 
 pub async fn detail(
@@ -421,7 +574,7 @@ pub async fn join(
     let t: TravelRow = sqlx::query_as(
         r#"
         SELECT id, travel_name, destination, start_date, end_date, invite_code,
-               status, creator_id, is_lock, remark
+               status, creator_id, is_lock, remark, cover
         FROM travel WHERE UPPER(invite_code) = $1
         "#,
     )

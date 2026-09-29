@@ -1,9 +1,8 @@
 # 微信开发者工具本机配置（会覆盖 project.config.json）
 project.private.config.json
 
-# npm 与微信「构建 npm」产物，不入库
+# npm 源码不入库；miniprogram_npm 要入库，否则预览/上传会缺 TDesign
 node_modules/
-miniprogram_npm/
 
 # 系统与编辑器
 .DS_Store

@@ -1,7 +1,7 @@
 <view class="create-page">
   <view class="intro">
     <view class="intro-title">修改旅途</view>
-    <view class="intro-sub">可改名称、目的地和日期。延长结束日会多出空天；缩短日期会去掉超出天数的行程点。</view>
+    <view class="intro-sub">可改名称、目的地和日期。起止同幅度移动时行程自动整体平移；只改开始日时可选择「整体平移」或「保留原日历」。延长结束日多出空天，缩短会删超出行程点。</view>
   </view>
 
   <view class="form-card">
@@ -39,6 +39,22 @@
         <view class="label">结束</view>
         <view class="picker {{end_date ? '' : 'empty'}}">{{end_date || '选择日期'}}</view>
       </picker>
+    </view>
+
+    <view class="field">
+      <view class="label">卡片图 <text class="optional">默认路线图</text></view>
+      <view class="cover-grid">
+        <view
+          class="cover-item {{cover === item.key ? 'on' : ''}}"
+          wx:for="{{covers}}"
+          wx:key="key"
+          data-key="{{item.key}}"
+          bind:tap="onCover"
+        >
+          <image class="cover-img" src="{{item.src}}" mode="aspectFit" />
+          <text class="cover-name">{{item.label}}</text>
+        </view>
+      </view>
     </view>
 
     <view class="field last">

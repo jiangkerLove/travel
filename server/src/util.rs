@@ -1,9 +1,40 @@
-use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
+use chrono::{FixedOffset, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use rand::Rng;
 use rust_decimal::prelude::{FromPrimitive, ToPrimitive};
 use rust_decimal::Decimal;
 
 use crate::error::AppError;
+
+/// 上海时区（中国标准时间，无夏令时）
+pub fn shanghai_offset() -> FixedOffset {
+    FixedOffset::east_opt(8 * 3600).expect("UTC+8")
+}
+
+pub fn shanghai_now() -> NaiveDateTime {
+    Utc::now().with_timezone(&shanghai_offset()).naive_local()
+}
+
+pub fn shanghai_today() -> NaiveDate {
+    shanghai_now().date()
+}
+
+pub fn gen_nickname() -> String {
+    const LEFT: &[&str] = &[
+        "晚风", "北岛", "青野", "雾岛", "星河", "南风", "青石", "远山", "薄暮", "霜叶",
+        "云隙", "潮声", "松风", "月渚", "荒原", "青岚", "暮色", "白露", "秋水", "凌川",
+        "野径", "寒江", "晴空", "夜航", "山海", "银河", "晓雾", "金风", "翠微", "孤舟",
+    ];
+    const RIGHT: &[&str] = &[
+        "行者", "旅人", "过客", "漫游", "拾光", "踏青", "远航", "听风", "问山", "追云",
+        "渡河", "寻路", "观海", "栖野", "拾贝", "停云", "踏雪", "乘风", "望月", "揽星",
+    ];
+    let mut rng = rand::thread_rng();
+    format!(
+        "{}{}",
+        LEFT[rng.gen_range(0..LEFT.len())],
+        RIGHT[rng.gen_range(0..RIGHT.len())]
+    )
+}
 
 pub fn gen_invite_code() -> String {
     const CHARS: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -82,7 +113,7 @@ pub fn split_amount(total: Decimal, n: usize) -> Vec<Decimal> {
 }
 
 pub fn valid_point_type(v: &str) -> bool {
-    matches!(v, "sight" | "hotel" | "food" | "gas" | "transport")
+    matches!(v, "sight" | "hotel" | "food" | "gas" | "transport" | "waypoint")
 }
 
 pub fn valid_traffic_type(v: &str) -> bool {

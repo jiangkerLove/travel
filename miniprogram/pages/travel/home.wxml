@@ -1,19 +1,25 @@
-<view class="home" wx:if="{{trip.id}}">
+<view class="home {{mapExpanded ? 'is-map-full' : ''}} {{mode === 'edit' ? 'is-edit' : ''}}" wx:if="{{trip.id}}">
   <view class="top-fixed">
     <view class="hero">
       <view class="hero-title-row">
         <view class="hero-title">{{trip.travel_name}}</view>
+        <view
+          class="hero-edit"
+          wx:if="{{mode === 'browse' && !trip.is_sample && trip.status !== 2 && (canEdit || trip.role === 1)}}"
+          bind:tap="onTravelMgmt"
+        >旅途管理</view>
       </view>
-      <view class="hero-meta" wx:if="{{trip.destination}}">
+      <view class="hero-meta dest {{mapExpanded ? 'is-hide' : ''}}" wx:if="{{trip.destination}}">
         {{trip.destination}}<text wx:if="{{trip.start_date}}"> · {{trip.start_date}} – {{trip.end_date}}</text>
       </view>
       <view class="hero-meta" wx:if="{{trip.is_sample}}">示例攻略</view>
     </view>
 
-    <view class="map-wrap">
+    <view class="map-wrap" style="height: {{mapHeight}}px;">
       <map
         id="dayMap"
         class="day-map"
+        style="height: {{mapHeight}}px;"
         latitude="{{mapLat}}"
         longitude="{{mapLng}}"
         scale="12"
@@ -27,6 +33,13 @@
         enable-building="{{true}}"
         bindmarkertap="onMarker"
       />
+      <view class="map-fab" catch:tap="toggleMapFull">
+        <t-icon
+          name="{{mapExpanded ? 'fullscreen-exit' : 'fullscreen-2'}}"
+          size="40rpx"
+          color="{{mapExpanded ? '#ffffff' : '#3d5c4e'}}"
+        />
+      </view>
     </view>
 
     <scroll-view scroll-x class="days" show-scrollbar="{{false}}">
@@ -41,7 +54,9 @@
         wx:for="{{days}}"
         wx:key="day_num"
         bind:tap="switchDay"
+        bindlongpress="onDayChipLongPress"
         data-index="{{index}}"
+        data-day="{{item.day_num}}"
       >
         <text class="day-n">D{{item.day_num}}</text>
         <text class="day-d">{{item.shortDate}}</text>
@@ -49,10 +64,18 @@
       </view>
     </scroll-view>
 
-    <view class="tabs" wx:if="{{mode === 'browse'}}">
+    <view class="tabs {{mapExpanded ? 'is-hide' : ''}}" wx:if="{{mode === 'browse'}}">
       <view class="tab {{tab === 'plan' ? 'on' : ''}}" bind:tap="setTab" data-v="plan">行程</view>
       <view class="tab {{tab === 'bill' ? 'on' : ''}}" bind:tap="setTab" data-v="bill">账单</view>
       <view class="tab {{tab === 'member' ? 'on' : ''}}" bind:tap="setTab" data-v="member">成员</view>
+    </view>
+    <view class="edit-banner has-act" wx:elif="{{aiPending}}">
+      <text class="edit-banner-txt" wx:if="{{generating}}">{{generatingHint}}</text>
+      <text class="edit-banner-txt" wx:else>{{aiIntro}} · 这版不手改，改提示词让 AI 接着排</text>
+      <text class="edit-banner-act" wx:if="{{!generating}}" catch:tap="openAi">改提示词</text>
+    </view>
+    <view class="edit-banner" wx:elif="{{generating}}">
+      <text>{{generatingHint}}</text>
     </view>
     <view class="edit-banner" wx:elif="{{!routesReady}}">
       <text>排点中 · 预览后看路线与用时</text>
@@ -60,11 +83,15 @@
   </view>
 
   <scroll-view
-    class="body-scroll {{mode === 'edit' ? 'with-bar' : ''}}"
+    class="body-scroll {{mode === 'edit' ? 'with-bar' : ''}} {{mapExpanded ? 'is-hide' : ''}}"
     scroll-y
     show-scrollbar="{{false}}"
   >
     <view wx:if="{{tab === 'plan' || mode === 'edit'}}" class="body-pad">
+      <view class="route-sum" wx:if="{{routeStat.hasRoute}}">
+        <text class="route-sum-k">{{routeStat.label}}</text>
+        <text class="route-sum-v">{{routeStat.summaryText}}</text>
+      </view>
       <!-- 全程预览 -->
       <block wx:if="{{mapScope === 'all'}}">
         <view class="empty-card" wx:if="{{!days.length}}">
@@ -73,15 +100,20 @@
         <block wx:for="{{days}}" wx:for-item="day" wx:key="day_num">
           <view class="day-sec">D{{day.day_num}} · {{day.shortDate}}</view>
           <view class="empty-mini" wx:if="{{!day.plans.length}}">这一天还空着</view>
-          <view
-            class="plan-row"
-            wx:for="{{day.plans}}"
-            wx:for-item="p"
-            wx:key="id"
-          >
-            <view class="plan-main" bind:tap="editPlan" data-id="{{p.id}}">
-              <view class="plan-name">{{p.place_name}}</view>
-              <view class="plan-sub">{{p.typeLabel}}</view>
+          <view class="plan-list" wx:else>
+            <view
+              class="plan-row"
+              wx:for="{{day.plans}}"
+              wx:for-item="p"
+              wx:key="id"
+            >
+              <view class="plan-main" bind:tap="editPlan" data-id="{{p.id}}">
+                <view class="plan-head">
+                  <view class="plan-name">{{p.place_name}}</view>
+                  <view class="plan-type">{{p.typeLabel}}</view>
+                </view>
+                <view class="plan-leg" wx:if="{{p.arriveText}}">{{p.arriveText}}</view>
+              </view>
             </view>
           </view>
         </block>
@@ -90,42 +122,55 @@
 
       <!-- 单日 -->
       <block wx:else>
-        <view class="plan-row is-start" wx:if="{{currentDay.startFrom}}">
-          <view class="plan-main">
-            <view class="plan-name">{{currentDay.startFrom.place_name}}</view>
-            <view class="plan-sub">D{{currentDay.startFrom.day_num}} 停留 · 今天从这里出发</view>
-          </view>
-        </view>
-
         <view class="empty-card" wx:if="{{!currentDay.plans.length}}">
+          <view class="plan-row is-start" wx:if="{{currentDay.startFrom}}">
+            <view class="plan-main">
+              <view class="plan-head">
+                <view class="plan-name">{{currentDay.startFrom.place_name}}</view>
+                <view class="plan-type">出发</view>
+              </view>
+              <view class="plan-sub">D{{currentDay.startFrom.day_num}} 停留 · 今天从这里出发</view>
+            </view>
+          </view>
           <view class="empty-mark">🍃</view>
           <view class="empty-title">{{mode === 'edit' ? (currentDay.startFrom ? '接着往下排' : '这一天还是空的') : '这一天还没有行程'}}</view>
           <view class="empty-sub">{{mode === 'edit' ? (currentDay.startFrom ? '起点已接上昨天最后停留的地方' : '先选地点，可随时移到其他天') : '路线由团长或有权限的同伴来排'}}</view>
-          <view class="soft-btn main" wx:if="{{mode === 'edit'}}" bind:tap="quickAddEnd">{{currentDay.startFrom ? '去下一站' : '开始选点'}}</view>
+          <view class="soft-btn main" wx:if="{{mode === 'edit' && !aiPending}}" bind:tap="quickAddEnd">{{currentDay.startFrom ? '去下一站' : '开始选点'}}</view>
         </view>
 
         <view class="plan-list" wx:else>
+          <view class="plan-row is-start" wx:if="{{currentDay.startFrom}}">
+            <view class="plan-main">
+              <view class="plan-head">
+                <view class="plan-name">{{currentDay.startFrom.place_name}}</view>
+                <view class="plan-type">出发</view>
+              </view>
+              <view class="plan-sub">D{{currentDay.startFrom.day_num}} 停留 · 今天从这里出发</view>
+            </view>
+          </view>
           <view
             class="plan-row {{dragIndex === index ? 'lift' : ''}} {{index === 0 && !currentDay.startFrom ? 'is-start' : ''}}"
             wx:for="{{currentDay.plans}}"
             wx:key="id"
           >
             <view class="plan-main" bind:tap="editPlan" data-id="{{item.id}}">
-              <view class="plan-name">{{index === 0 && !currentDay.startFrom ? '起点 · ' : ''}}{{item.place_name}}</view>
-              <view class="plan-sub">
-                {{item.typeLabel}}{{index === 0 && !currentDay.startFrom && !item.latitude ? ' · 还没标坐标' : ''}}
+              <view class="plan-head">
+                <view class="plan-name">{{index === 0 && !currentDay.startFrom ? '起点 · ' : ''}}{{item.place_name}}</view>
+                <view class="plan-type">{{item.typeLabel}}</view>
               </view>
+              <view class="plan-sub" wx:if="{{index === 0 && !currentDay.startFrom && !item.latitude}}">还没标坐标</view>
+              <view class="plan-leg" wx:if="{{item.arriveText && (index > 0 || currentDay.startFrom)}}">{{item.arriveText}}</view>
               <view class="plan-tip" wx:if="{{item.remark}}">{{item.remark}}</view>
             </view>
             <view
               class="plan-more"
-              wx:if="{{mode === 'edit'}}"
+              wx:if="{{mode === 'edit' && !aiPending}}"
               catch:tap="onMorePlan"
               data-id="{{item.id}}"
             >⋯</view>
             <view
               class="plan-handle"
-              wx:if="{{mode === 'edit'}}"
+              wx:if="{{mode === 'edit' && !aiPending}}"
               catchtouchstart="onDragStart"
               catchtouchmove="onDragMove"
               catchtouchend="onDragEnd"
@@ -245,38 +290,8 @@
         <view class="empty-sub">分享邀请码，或添加随行成员</view>
       </view>
 
-      <view class="mgmt-card" wx:if="{{!trip.is_sample && trip.status !== 2}}">
-        <view class="mgmt-title">旅途管理</view>
-        <view
-          class="mgmt-row"
-          wx:if="{{canEdit}}"
-          bind:tap="enterEdit"
-        >
-          <view>
-            <view class="mgmt-k">排行程</view>
-            <view class="mgmt-v">添加、调整地点与路线</view>
-          </view>
-          <text class="settle-arrow">›</text>
-        </view>
-        <view
-          class="mgmt-row"
-          wx:if="{{trip.role === 1}}"
-          bind:tap="goEditTravel"
-        >
-          <view>
-            <view class="mgmt-k">修改名称与日期</view>
-            <view class="mgmt-v">可延长或缩短行程天数</view>
-          </view>
-          <text class="settle-arrow">›</text>
-        </view>
-        <view class="mgmt-row last" wx:if="{{trip.role === 1 && isCreator}}" bind:tap="archive">
-          <view>
-            <view class="mgmt-k">归档旅途</view>
-            <view class="mgmt-v">仅创建人可操作 · 归档后不可再改账，可看分账</view>
-          </view>
-          <text class="settle-arrow">›</text>
-        </view>
-        <view class="mgmt-row last" wx:if="{{trip.role !== 1}}" bind:tap="quit">
+      <view class="mgmt-card" wx:if="{{!trip.is_sample && trip.status !== 2 && trip.role !== 1}}">
+        <view class="mgmt-row last" bind:tap="quit">
           <view>
             <view class="mgmt-k danger-text">退出旅途</view>
             <view class="mgmt-v">退出后不再看到本团账单</view>
@@ -291,9 +306,128 @@
     <t-fab icon="add" bind:click="addBill" />
   </view>
 
-  <view class="edit-bar" wx:if="{{mode === 'edit'}}">
+  <view class="edit-bar" wx:if="{{mode === 'edit' && aiPending}}">
+    <view class="edit-bar-btn ghost" bind:tap="cancelAi">取消</view>
+    <view class="edit-bar-btn add" bind:tap="openAi">改提示词</view>
+    <view class="edit-bar-btn main" bind:tap="keepAi">保存</view>
+  </view>
+  <view class="edit-bar" wx:elif="{{mode === 'edit'}}">
+    <view class="edit-bar-btn ai" bind:tap="openAi">AI 排程</view>
+    <view class="edit-bar-btn ghost narrow" bind:tap="openDayShift">移日程</view>
     <view class="edit-bar-btn add" bind:tap="quickAddEnd">＋ 地点</view>
-    <view class="edit-bar-btn ghost" bind:tap="generateRoutes">{{routesReady ? '重新预览' : '预览'}}</view>
-    <view class="edit-bar-btn main" bind:tap="finishEdit">完成并保存</view>
+    <view class="edit-bar-btn ghost" wx:if="{{mapScope === 'all'}}" bind:tap="previewAll">预览全程</view>
+    <view class="edit-bar-btn ghost" wx:else bind:tap="previewDay">{{routesReady ? '重预览' : '预览'}}</view>
+    <view class="edit-bar-btn main" bind:tap="finishEdit">完成</view>
+  </view>
+
+  <view class="ai-mask" wx:if="{{aiOpen}}" catch:tap="onAiMask">
+    <view class="ai-sheet" style="margin-bottom: {{aiKb}}px;" catch:tap="onAiSheetTap">
+      <view class="ai-head">
+        <view>
+          <view class="ai-title">AI 排行程</view>
+          <view class="ai-sub" wx:if="{{trip.start_date}}">已按旅途 {{trip.start_date}} – {{trip.end_date}} · {{days.length}} 天排程，不用在下方写日期</view>
+        </view>
+        <view class="ai-close" catch:tap="closeAi">收起</view>
+      </view>
+      <view class="ai-scope">
+        <view class="ai-chip {{aiMode !== 'recommend' ? 'on' : ''}}" catch:tap="setAiMode" data-mode="plan">重排行程</view>
+        <view class="ai-chip {{aiMode === 'recommend' ? 'on' : ''}}" catch:tap="setAiMode" data-mode="recommend">沿途推荐</view>
+      </view>
+      <view class="ai-scope">
+        <view class="ai-chip {{aiDayNum === 0 ? 'on' : ''}}" catch:tap="setAiDay" data-scope="all">全程</view>
+        <view
+          class="ai-chip {{aiDayNum === item.day_num ? 'on' : ''}}"
+          wx:for="{{days}}"
+          wx:key="day_num"
+          catch:tap="setAiDay"
+          data-scope="{{item.day_num}}"
+        >D{{item.day_num}}</view>
+      </view>
+      <view class="ai-body">
+        <view class="ai-hint" wx:if="{{aiPending && aiMode === 'recommend'}}">基于当前这版继续推荐。可写偏好，不必写日期。</view>
+        <view class="ai-hint" wx:elif="{{aiPending}}">基于当前这版继续改。写必去/不去、方向即可，日期仍按旅途。</view>
+        <view class="ai-hint" wx:elif="{{aiMode === 'recommend'}}">不改现有走法，只在附近顺路加景点。可不填，或写偏好。</view>
+        <view class="ai-hint" wx:elif="{{aiDayNum === 0}}">日期天数已自动带入。写：环线方向、必去/不去、节奏即可。</view>
+        <view class="ai-hint" wx:else>只改 D{{aiDayNum}}。写这天加什么、去掉什么，不用写日期。</view>
+        <textarea
+          class="ai-input"
+          value="{{aiPrompt}}"
+          maxlength="2000"
+          placeholder="{{aiMode === 'recommend' ? '例：多推荐古镇和自然风光，别太累（可不填）' : (aiDayNum === 0 ? '例：逆时针环线，必去四姑娘山、丹巴，不去新都桥，休闲节奏' : '例：加上洱海日落，去掉喜洲')}}"
+          placeholder-class="ai-ph"
+          adjust-position="{{false}}"
+          cursor-spacing="24"
+          hold-keyboard="{{true}}"
+          show-confirm-bar="{{false}}"
+          bindinput="onAiPrompt"
+          bindkeyboardheightchange="onAiKeyboard"
+        />
+        <view class="ai-row">
+          <view class="ai-btn main tight {{aiLoading ? 'off' : ''}}" catch:tap="runAiDraft">{{aiPending ? (aiMode === 'recommend' ? '按提示继续推荐' : '按提示继续改') : (aiMode === 'recommend' ? '推荐并预览' : (aiDayNum ? '生成这一天' : '生成并预览'))}}</view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="ai-mask" wx:if="{{dayShiftOpen}}" catch:tap="closeDayShift">
+    <view class="ai-sheet day-shift-sheet" catch:tap="onAiSheetTap">
+      <view class="ai-head">
+        <view class="ai-title">调整日程</view>
+        <view class="ai-close" catch:tap="closeDayShift">取消</view>
+      </view>
+
+      <scroll-view scroll-y class="day-pick-list" enhanced show-scrollbar="{{false}}">
+        <view
+          class="day-pick-row {{item.checked ? 'shift-on' : ''}} {{item.incomingFrom ? 'shift-in' : ''}}"
+          wx:for="{{dayShiftDays}}"
+          wx:key="day_num"
+          catch:tap="toggleDayShiftDay"
+          data-day="{{item.day_num}}"
+        >
+          <view class="shift-row-l">
+            <view class="day-pick-n" wx:if="{{!item.targetDay}}">D{{item.day_num}} · {{item.shortDate}}</view>
+            <view class="day-pick-n shift-move" wx:else>
+              <text>D{{item.day_num}} · {{item.shortDate}}</text>
+              <text class="shift-arrow">→</text>
+              <text class="shift-to">D{{item.targetDay}} · {{item.targetShortDate}}</text>
+            </view>
+            <view class="day-pick-s">
+              {{item.hint}}<text wx:if="{{item.incomingFrom && !item.checked}}" class="shift-from"> · 将收到 D{{item.incomingFrom}}</text>
+            </view>
+          </view>
+          <text class="shift-mark" wx:if="{{item.checked}}">✓</text>
+        </view>
+      </scroll-view>
+
+      <view class="shift-foot">
+        <view class="shift-btn {{!dayShiftHasPick ? 'off' : ''}}" catch:tap="shiftDaysEarlier">往前</view>
+        <view class="shift-btn {{!dayShiftHasPick ? 'off' : ''}}" catch:tap="shiftDaysLater">往后</view>
+        <view class="shift-btn main {{dayShiftBlocked || dayShiftBusy ? 'off' : ''}}" catch:tap="applyDayShift">确定</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="ai-mask" wx:if="{{dayPickOpen}}" catch:tap="closeDayPick">
+    <view class="ai-sheet day-pick-sheet" catch:tap="onAiSheetTap">
+      <view class="ai-head">
+        <view class="ai-title">{{dayPickTitle}}</view>
+        <view class="ai-close" catch:tap="closeDayPick">取消</view>
+      </view>
+      <scroll-view scroll-y class="day-pick-list" enhanced show-scrollbar="{{false}}">
+        <view
+          class="day-pick-row {{item.disabled ? 'off' : ''}}"
+          wx:for="{{dayPickDays}}"
+          wx:key="day_num"
+          catch:tap="onPickDay"
+          data-day="{{item.day_num}}"
+        >
+          <view>
+            <view class="day-pick-n">D{{item.day_num}} · {{item.shortDate}}</view>
+            <view class="day-pick-s">{{item.hint}}</view>
+          </view>
+          <text class="settle-arrow" wx:if="{{!item.disabled}}">›</text>
+        </view>
+      </scroll-view>
+    </view>
   </view>
 </view>

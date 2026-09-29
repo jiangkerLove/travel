@@ -25,7 +25,8 @@ function sketchSegment(from, to, traffic) {
   return pts
 }
 
-function fillLineRoutes(lines, points) {
+function fillLineRoutes(lines, points, opts = {}) {
+  const sketch = opts.sketch !== false
   const map = {}
   ;(points || []).forEach((p) => {
     map[p.id] = p
@@ -35,11 +36,12 @@ function fillLineRoutes(lines, points) {
     const b = map[line.to_id]
     if (!a || !b || !a.latitude || !b.latitude) return line
     if ((line.points || []).length >= 2) return line
+    if (!sketch) return null
     return {
       ...line,
       points: sketchSegment(a, b, line.traffic_type),
     }
-  })
+  }).filter(Boolean)
   const fromNav = out.some((l) => l.from_nav)
   return { lines: out, fromNav }
 }

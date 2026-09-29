@@ -23,6 +23,7 @@ cp .env.example .env
 - `DATABASE_URL`：已有 Postgres；容器内用 `host.docker.internal`，不要写 `127.0.0.1`
 - `JWT_SECRET`
 - `WECHAT_APPID` / `WECHAT_SECRET`
+- `DEEPSEEK_API_KEY`（可选，AI 排行程）
 
 ### 2. 启动
 
@@ -80,5 +81,5 @@ npm install
 ## 已覆盖能力
 
 - 微信登录、多旅途列表、创建/加入/退出/归档
-- 行程点位、排序、路书地图
+- 行程点位、排序、路书地图、AI 排行程（DeepSeek，粘贴攻略链接或描述后预览再保存）
 - 记账分摊、账单池 / 我的花销、智能分账（含团体汇总）

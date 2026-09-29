@@ -41,6 +41,22 @@
       </picker>
     </view>
 
+    <view class="field">
+      <view class="label">卡片图 <text class="optional">默认路线图</text></view>
+      <view class="cover-grid">
+        <view
+          class="cover-item {{cover === item.key ? 'on' : ''}}"
+          wx:for="{{covers}}"
+          wx:key="key"
+          data-key="{{item.key}}"
+          bind:tap="onCover"
+        >
+          <image class="cover-img" src="{{item.src}}" mode="aspectFit" />
+          <text class="cover-name">{{item.label}}</text>
+        </view>
+      </view>
+    </view>
+
     <view class="field last">
       <view class="label">备注 <text class="optional">选填</text></view>
       <textarea

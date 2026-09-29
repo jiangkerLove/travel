@@ -4,6 +4,7 @@ const POINT_TYPES = [
   { value: 'food', label: '餐饮', color: '#E37318' },
   { value: 'gas', label: '加油点', color: '#008858' },
   { value: 'transport', label: '交通', color: '#5E5E5E' },
+  { value: 'waypoint', label: '途经', color: '#9CA3AF' },
 ]
 
 const TRAFFIC_TYPES = [
@@ -51,26 +52,106 @@ function trafficLabel(type) {
   return (TRAFFIC_TYPES.find((i) => i.value === type) || {}).label || type || ''
 }
 
-function formatLegHint(distanceM, durationS) {
+function formatDistance(distanceM) {
   const m = Number(distanceM) || 0
+  if (m <= 0) return ''
+  return m >= 1000 ? `${(m / 1000).toFixed(m >= 10000 ? 0 : 1)}km` : `${Math.round(m)}m`
+}
+
+function formatDuration(durationS) {
   const s = Number(durationS) || 0
-  if (m <= 0 && s <= 0) return ''
-  let dist = ''
-  if (m > 0) {
-    dist = m >= 1000 ? `${(m / 1000).toFixed(m >= 10000 ? 0 : 1)}km` : `${Math.round(m)}m`
+  if (s <= 0) return ''
+  if (s < 90) return '约1分钟'
+  if (s < 3600) return `约${Math.round(s / 60)}分钟`
+  const h = Math.floor(s / 3600)
+  const min = Math.round((s % 3600) / 60)
+  return min ? `约${h}小时${min}分` : `约${h}小时`
+}
+
+const ROUTE_MODE_ORDER = ['drive', 'bus', 'walk', 'highspeed', 'train', 'plane']
+
+function addRouteBucket(buckets, traffic, dist, dur) {
+  const d = Number(dist) || 0
+  if (d <= 0) return
+  const key = ROUTE_MODE_ORDER.includes(traffic) ? traffic : 'drive'
+  const cur = buckets[key] || { distance_m: 0, duration_s: 0 }
+  cur.distance_m += d
+  cur.duration_s += Number(dur) || 0
+  buckets[key] = cur
+}
+
+function routeItemsFromBuckets(buckets) {
+  const items = []
+  for (const key of ROUTE_MODE_ORDER) {
+    const b = buckets[key]
+    if (!b || b.distance_m <= 0) continue
+    items.push({
+      traffic_type: key,
+      label: trafficLabel(key),
+      distanceText: formatDistance(b.distance_m),
+    })
   }
-  let time = ''
-  if (s > 0) {
-    if (s < 90) time = '约1分钟'
-    else if (s < 3600) time = `约${Math.round(s / 60)}分钟`
-    else {
-      const h = Math.floor(s / 3600)
-      const min = Math.round((s % 3600) / 60)
-      time = min ? `约${h}小时${min}分` : `约${h}小时`
+  return items
+}
+
+function summarizeRouteLegsFromDays(days) {
+  const buckets = {}
+  for (const day of days || []) {
+    if (Number(day.start_distance_m) > 0) {
+      const t = (day.plans && day.plans[0] && day.plans[0].traffic_type) || 'drive'
+      addRouteBucket(buckets, t, day.start_distance_m, day.start_duration_s)
+    }
+    for (const p of day.plans || []) {
+      if (Number(p.next_distance_m) > 0) {
+        addRouteBucket(buckets, p.traffic_type || 'drive', p.next_distance_m, p.next_duration_s)
+      }
     }
   }
+  const items = routeItemsFromBuckets(buckets)
+  return {
+    hasRoute: items.length > 0,
+    items,
+    summaryText: items.map((i) => `${i.label} ${i.distanceText}`).join(' · '),
+  }
+}
+
+function summarizeRouteLegsFromApi(apiRouteStat) {
+  const buckets = {}
+  for (const row of (apiRouteStat && apiRouteStat.items) || []) {
+    addRouteBucket(buckets, row.traffic_type, row.distance_m, row.duration_s)
+  }
+  const items = routeItemsFromBuckets(buckets)
+  return {
+    hasRoute: items.length > 0,
+    items,
+    summaryText: items.map((i) => `${i.label} ${i.distanceText}`).join(' · '),
+  }
+}
+
+function buildRouteStatSummary(days, mapScope, dayIndex, apiRouteStat) {
+  if (mapScope === 'all' && apiRouteStat && apiRouteStat.items && apiRouteStat.items.length) {
+    return { label: '全程', ...summarizeRouteLegsFromApi(apiRouteStat) }
+  }
+  const list = mapScope === 'all' ? (days || []) : [(days || [])[dayIndex]].filter(Boolean)
+  const day = list[0]
+  return {
+    label: mapScope === 'all' ? '全程' : `D${(day && day.day_num) || ''}`,
+    ...summarizeRouteLegsFromDays(list),
+  }
+}
+
+function formatLegHint(distanceM, durationS) {
+  const dist = formatDistance(distanceM)
+  const time = formatDuration(durationS)
   if (dist && time) return `${dist} · ${time}`
   return dist || time
+}
+
+/** 路段文案：交通方式 · 距离 · 用时（有什么显示什么） */
+function formatLegLabel(traffic, distanceM, durationS) {
+  return [trafficLabel(traffic), formatDistance(distanceM), formatDuration(durationS)]
+    .filter(Boolean)
+    .join(' · ')
 }
 
 function legDurationSeconds(p, line) {
@@ -169,14 +250,44 @@ function spreadOverlappingPoints(points) {
   return list
 }
 
+function segmentDuration(from, to, line) {
+  if (to && Number(to.traffic_duration) > 0) return Number(to.traffic_duration) * 60
+  if (line && Number(line.duration_s) > 0) return Number(line.duration_s)
+  if (from && Number(from.next_duration_s) > 0) return Number(from.next_duration_s)
+  return 0
+}
+
+/** 到达该点所需时间/距离（写在目的地标注上） */
+function arrivalLegText(points, index, lines, startHint) {
+  const p = points[index]
+  if (!p) return ''
+  if (index === 0) {
+    if (!startHint) return ''
+    return [trafficLabel(p.traffic_type), startHint].filter(Boolean).join(' · ')
+  }
+  const from = points[index - 1]
+  const line = (lines || []).find((l) => l.from_id === from.id && l.to_id === p.id)
+  const distance = from.next_distance_m || (line && line.distance_m)
+  const duration = segmentDuration(from, p, line)
+  return formatLegLabel(p.traffic_type, distance, duration)
+}
+
 function toMarkers(points, opts) {
   const markStart = !!(opts && opts.markStart)
-  const placeMarkers = spreadOverlappingPoints(points).map((p, i) => {
+  const lines = (opts && opts.lines) || []
+  const startHint = (opts && opts.startHint) || ''
+  const showLegs = !!(opts && opts.showLegs)
+  const geoList = spreadOverlappingPoints(points)
+  const placeMarkers = geoList.map((p, i) => {
     const name = String(p.place_name || p.name || '').trim()
     const short = name.length > 10 ? `${name.slice(0, 10)}…` : name
     const isStart = !!(p.isStart || (markStart && i === 0))
     let content = short ? `${i + 1}. ${short}` : String(i + 1)
     if (isStart) content = short ? `起点 · ${short}` : '起点'
+    if (showLegs) {
+      const leg = arrivalLegText(geoList, i, lines, startHint)
+      if (leg) content = `${content}\n${leg}`
+    }
     return {
       id: Number(p.id) || i + 1,
       latitude: Number(p.latitude),
@@ -200,47 +311,7 @@ function toMarkers(points, opts) {
     }
   })
 
-  // 路段用时标在路线中段，不占列表
-  const showLegs = !(opts && opts.hideLegs)
-  const legMarkers = showLegs ? toLegTimeMarkers(opts && opts.lines) : []
-  return placeMarkers.concat(legMarkers)
-}
-
-/** 在路段中点标注交通方式 + 路程时间 */
-function toLegTimeMarkers(lines) {
-  return (lines || [])
-    .map((l, idx) => {
-      const pts = (l.points || []).filter((p) => p.latitude && p.longitude)
-      if (pts.length < 2) return null
-      const mode = trafficLabel(l.traffic_type)
-      const hint = formatLegHint(l.distance_m, l.duration_s)
-      const content = [mode, hint].filter(Boolean).join(' · ')
-      if (!content) return null
-      const mid = pts[Math.floor(pts.length / 2)]
-      return {
-        id: 900000000 + idx,
-        latitude: Number(mid.latitude),
-        longitude: Number(mid.longitude),
-        width: 12,
-        height: 12,
-        alpha: 0.01,
-        anchor: { x: 0.5, y: 0.5 },
-        zIndex: 50 + idx,
-        callout: {
-          content,
-          display: 'ALWAYS',
-          padding: 5,
-          borderRadius: 999,
-          fontSize: 10,
-          color: '#5d8a76',
-          bgColor: '#ffffff',
-          borderWidth: 1,
-          borderColor: '#cfe0d6',
-          textAlign: 'center',
-        },
-      }
-    })
-    .filter(Boolean)
+  return placeMarkers
 }
 
 /** includePoints 用：只轻微外扩，避免视野被拉得太小 */
@@ -315,7 +386,11 @@ module.exports = {
   pointMeta,
   costLabel,
   trafficLabel,
+  formatDistance,
+  formatDuration,
   formatLegHint,
+  formatLegLabel,
+  buildRouteStatSummary,
   legDurationSeconds,
   withLegHints,
   linesToPolyline,

@@ -7,9 +7,10 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    ai_log::{list_ai_plan_logs, AiDraftLogCtx},
     db::{
-        find_travel, invalidate_route_cache, list_plans, load_route_cache, require_editor, require_member,
-        save_route_cache, PlanRow,
+        clear_travel_route_cache, find_travel, invalidate_route_cache, list_plans, load_route_cache,
+        require_editor, require_member, save_route_cache, PlanRow,
     },
     error::{ok, ApiOk, AppError},
     route::{plan_route, LatLng},
@@ -44,6 +45,10 @@ pub struct ListQ {
     pub day_num: Option<i32>,
     /// 为 0 时跳过路书计算，仅返回排程点位（编辑态用）
     pub routes: Option<i16>,
+    /// 为 1 时忽略已有路书缓存，重新向高德要当天路线
+    pub fresh: Option<i16>,
+    /// 为 1 时只读数据库路书缓存，缺失段不请求高德
+    pub cache_only: Option<i16>,
 }
 
 #[derive(Deserialize)]
@@ -130,10 +135,24 @@ pub struct DayVo {
 }
 
 #[derive(Serialize)]
+pub struct RouteModeStatVo {
+    pub traffic_type: String,
+    pub distance_m: i32,
+    pub duration_s: i32,
+}
+
+#[derive(Serialize)]
+pub struct RouteStatVo {
+    pub items: Vec<RouteModeStatVo>,
+}
+
+#[derive(Serialize)]
 pub struct PlanListVo {
     pub day_count: i32,
     pub start_date: String,
     pub days: Vec<DayVo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub route_stat: Option<RouteStatVo>,
 }
 
 #[derive(Serialize, Clone)]
@@ -185,6 +204,66 @@ fn same_stay(a: &PlanVo, b: &PlanVo) -> bool {
     a.place_name.trim() == b.place_name.trim()
 }
 
+fn normalize_leg_traffic(t: Option<&str>) -> &'static str {
+    match t.unwrap_or("drive") {
+        "walk" => "walk",
+        "drive" => "drive",
+        "bus" => "bus",
+        "highspeed" => "highspeed",
+        "train" => "train",
+        "plane" => "plane",
+        _ => "drive",
+    }
+}
+
+fn collect_route_stats(days: &[DayVo]) -> RouteStatVo {
+    use std::collections::HashMap;
+    const MODE_ORDER: [&str; 6] = ["drive", "bus", "walk", "highspeed", "train", "plane"];
+    let mut map: HashMap<&str, (i32, i32)> = HashMap::new();
+    for day in days {
+        if let Some(d) = day.start_distance_m.filter(|n| *n > 0) {
+            let t = normalize_leg_traffic(
+                day.plans
+                    .first()
+                    .and_then(|p| p.traffic_type.as_deref()),
+            );
+            let e = map.entry(t).or_insert((0, 0));
+            e.0 += d;
+            e.1 += day.start_duration_s.unwrap_or(0);
+        }
+        for p in &day.plans {
+            if let Some(d) = p.next_distance_m.filter(|n| *n > 0) {
+                let t = normalize_leg_traffic(p.traffic_type.as_deref());
+                let e = map.entry(t).or_insert((0, 0));
+                e.0 += d;
+                e.1 += p.next_duration_s.unwrap_or(0);
+            }
+        }
+    }
+    let mut items = Vec::new();
+    for mode in MODE_ORDER {
+        if let Some((distance_m, duration_s)) = map.remove(mode) {
+            if distance_m > 0 {
+                items.push(RouteModeStatVo {
+                    traffic_type: mode.into(),
+                    distance_m,
+                    duration_s,
+                });
+            }
+        }
+    }
+    for (mode, (distance_m, duration_s)) in map {
+        if distance_m > 0 {
+            items.push(RouteModeStatVo {
+                traffic_type: mode.into(),
+                distance_m,
+                duration_s,
+            });
+        }
+    }
+    RouteStatVo { items }
+}
+
 fn traffic_style(t: Option<&str>) -> (String, bool) {
     match t.unwrap_or("drive") {
         "walk" => ("#8B8B8B".into(), true),
@@ -223,7 +302,14 @@ fn build_lines(points: &[PlanVo]) -> Vec<MapLineVo> {
     lines
 }
 
-async fn with_routes(pool: &sqlx::PgPool, key: &str, sk: &str, points: &[PlanVo]) -> Vec<MapLineVo> {
+async fn with_routes(
+    pool: &sqlx::PgPool,
+    key: &str,
+    sk: &str,
+    points: &[PlanVo],
+    force: bool,
+    cache_only: bool,
+) -> Vec<MapLineVo> {
     let mut lines = build_lines(points);
     for line in &mut lines {
         let Some(a) = points.iter().find(|p| p.id == line.from_id) else {
@@ -237,16 +323,21 @@ async fn with_routes(pool: &sqlx::PgPool, key: &str, sk: &str, points: &[PlanVo]
         let to_lat = b.latitude.unwrap_or(0.0);
         let to_lng = b.longitude.unwrap_or(0.0);
         let traffic = b.traffic_type.as_deref();
-        if let Some((mode, pts, from_nav, distance_m, duration_s)) = load_route_cache(
-            pool, a.id, b.id, traffic, from_lat, from_lng, to_lat, to_lng,
-        )
-        .await
-        {
-            line.mode = mode;
-            line.points = pts;
-            line.from_nav = from_nav;
-            line.distance_m = distance_m;
-            line.duration_s = duration_s;
+        if !force {
+            if let Some((mode, pts, from_nav, distance_m, duration_s)) = load_route_cache(
+                pool, a.id, b.id, traffic, from_lat, from_lng, to_lat, to_lng,
+            )
+            .await
+            {
+                line.mode = mode;
+                line.points = pts;
+                line.from_nav = from_nav;
+                line.distance_m = distance_m;
+                line.duration_s = duration_s;
+                continue;
+            }
+        }
+        if cache_only {
             continue;
         }
         let result = plan_route(key, sk, traffic, from_lat, from_lng, to_lat, to_lng).await;
@@ -435,6 +526,7 @@ pub async fn list(
         (1..=total_days).collect()
     };
     let want_routes = q.routes.unwrap_or(1) != 0;
+    let cache_only = q.cache_only.unwrap_or(0) != 0;
     let mut days = Vec::new();
     let mut prev_last: Option<PlanVo> = None;
     for day_num in 1..=total_days {
@@ -444,12 +536,15 @@ pub async fn list(
             .filter(|p| p.day_num == day_num)
             .map(to_vo)
             .collect();
-        if want_routes {
+        let in_range = range.contains(&day_num);
+        if want_routes && in_range {
             let lines = with_routes(
                 &state.pool,
                 &state.amap_key,
                 &state.amap_secret,
                 &day_plans,
+                false,
+                cache_only,
             )
             .await;
             for p in &mut day_plans {
@@ -464,7 +559,7 @@ pub async fn list(
             _ => false,
         };
         let (start_from, start_distance_m, start_duration_s) =
-            if duplicated || prev_last.is_none() {
+            if !in_range || duplicated || prev_last.is_none() {
                 (None, None, None)
             } else {
                 let start = prev_last.as_ref().map(|p| StartFromVo {
@@ -485,6 +580,8 @@ pub async fn list(
                             &state.amap_key,
                             &state.amap_secret,
                             &pair,
+                            false,
+                            cache_only,
                         )
                         .await;
                         if let Some(line) = cross.first() {
@@ -507,10 +604,21 @@ pub async fn list(
         }
         prev_last = day_plans.last().cloned();
     }
+    let route_stat = if want_routes {
+        let stat = collect_route_stats(&days);
+        if stat.items.is_empty() {
+            None
+        } else {
+            Some(stat)
+        }
+    } else {
+        None
+    };
     Ok(ok(PlanListVo {
         day_count: total_days,
         start_date: t.start_date.to_string(),
         days,
+        route_stat,
     }))
 }
 
@@ -762,6 +870,208 @@ pub async fn move_plan(
     Ok(ok(to_vo(&updated)))
 }
 
+const SHIFT_TEMP_OFFSET: i32 = 10_000;
+
+#[derive(Deserialize)]
+pub struct ShiftDaysReq {
+    pub travel_id: i64,
+    pub delta: i32,
+    pub day_nums: Vec<i32>,
+    #[serde(default)]
+    pub dry_run: bool,
+}
+
+#[derive(Serialize)]
+pub struct ShiftDayMove {
+    pub from_day: i32,
+    pub to_day: i32,
+    pub plan_count: i64,
+}
+
+#[derive(Serialize)]
+pub struct ShiftDayConflict {
+    pub day_num: i32,
+    pub message: String,
+}
+
+#[derive(Serialize)]
+pub struct ShiftDaysResp {
+    pub ok: bool,
+    pub moves: Vec<ShiftDayMove>,
+    pub conflicts: Vec<ShiftDayConflict>,
+}
+
+async fn day_plan_counts(
+    pool: &sqlx::PgPool,
+    travel_id: i64,
+) -> Result<std::collections::HashMap<i32, i64>, AppError> {
+    let rows: Vec<(i32, i64)> = sqlx::query_as(
+        "SELECT day_num, COUNT(*)::bigint FROM day_plan WHERE travel_id = $1 GROUP BY day_num",
+    )
+    .bind(travel_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().collect())
+}
+
+fn analyze_day_shift(
+    total_days: i32,
+    selected: &[i32],
+    delta: i32,
+    counts: &std::collections::HashMap<i32, i64>,
+) -> ShiftDaysResp {
+    let mut sel: std::collections::HashSet<i32> = selected.iter().copied().collect();
+    sel.retain(|d| *d >= 1 && *d <= total_days);
+    let mut moves = Vec::new();
+    let mut conflicts = Vec::new();
+    if delta == 0 || sel.is_empty() {
+        return ShiftDaysResp {
+            ok: false,
+            moves,
+            conflicts,
+        };
+    }
+    let mut ordered: Vec<i32> = sel.iter().copied().collect();
+    ordered.sort_unstable();
+    for day in ordered {
+        let target = day + delta;
+        if target < 1 || target > total_days {
+            conflicts.push(ShiftDayConflict {
+                day_num: day,
+                message: if target < 1 {
+                    "前面没有空天".into()
+                } else {
+                    "后面没有空天".into()
+                },
+            });
+            continue;
+        }
+        let foreign = counts.get(&target).copied().unwrap_or(0) > 0 && !sel.contains(&target);
+        if foreign {
+            conflicts.push(ShiftDayConflict {
+                day_num: day,
+                message: format!("D{target} 已有行程"),
+            });
+            continue;
+        }
+        moves.push(ShiftDayMove {
+            from_day: day,
+            to_day: target,
+            plan_count: counts.get(&day).copied().unwrap_or(0),
+        });
+    }
+    let ok = !moves.is_empty() && conflicts.is_empty();
+    ShiftDaysResp {
+        ok,
+        moves,
+        conflicts,
+    }
+}
+
+async fn compact_day_sort(pool: &sqlx::PgPool, travel_id: i64, day_num: i32) -> Result<(), AppError> {
+    let ids: Vec<i64> = sqlx::query_scalar(
+        "SELECT id FROM day_plan WHERE travel_id = $1 AND day_num = $2 ORDER BY sort ASC, id ASC",
+    )
+    .bind(travel_id)
+    .bind(day_num)
+    .fetch_all(pool)
+    .await?;
+    for (i, id) in ids.iter().enumerate() {
+        if i == 0 {
+            sqlx::query(
+                "UPDATE day_plan SET sort = 0, traffic_type = NULL, traffic_duration = NULL WHERE id = $1",
+            )
+            .bind(id)
+            .execute(pool)
+            .await?;
+        } else {
+            sqlx::query(
+                "UPDATE day_plan SET sort = $1, traffic_duration = NULL, traffic_type = COALESCE(NULLIF(traffic_type, ''), 'drive') WHERE id = $2",
+            )
+            .bind(i as i32)
+            .bind(id)
+            .execute(pool)
+            .await?;
+        }
+    }
+    Ok(())
+}
+
+/// 在不改旅途起止日的前提下，平移选定天的行程
+pub async fn shift_days(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Json(req): Json<ShiftDaysReq>,
+) -> Result<Json<ApiOk<ShiftDaysResp>>, AppError> {
+    require_editor(&state.pool, req.travel_id, user.id).await?;
+    let t = find_travel(&state.pool, req.travel_id).await?;
+    if t.is_lock {
+        return Err(AppError::BadRequest("已锁定，不可调整日程".into()));
+    }
+    if crate::sample::is_sample_remark(&t.remark) {
+        return Err(AppError::BadRequest("示例旅途不可修改".into()));
+    }
+    if req.delta == 0 {
+        return Err(AppError::BadRequest("请指定移动天数".into()));
+    }
+    let total_days = day_count(t.start_date, t.end_date);
+    let mut day_nums: Vec<i32> = req
+        .day_nums
+        .iter()
+        .copied()
+        .filter(|d| *d >= 1 && *d <= total_days)
+        .collect();
+    day_nums.sort_unstable();
+    day_nums.dedup();
+    if day_nums.is_empty() {
+        return Err(AppError::BadRequest("请选择要移动的天".into()));
+    }
+
+    let counts = day_plan_counts(&state.pool, req.travel_id).await?;
+    let preview = analyze_day_shift(total_days, &day_nums, req.delta, &counts);
+    if req.dry_run || !preview.ok {
+        return Ok(ok(preview));
+    }
+
+    let mut tx = state.pool.begin().await?;
+    sqlx::query(
+        "UPDATE day_plan SET day_num = day_num + $1 WHERE travel_id = $2 AND day_num = ANY($3)",
+    )
+    .bind(SHIFT_TEMP_OFFSET)
+    .bind(req.travel_id)
+    .bind(&day_nums)
+    .execute(&mut *tx)
+    .await?;
+    for mv in &preview.moves {
+        sqlx::query(
+            "UPDATE day_plan SET day_num = $1 WHERE travel_id = $2 AND day_num = $3",
+        )
+        .bind(mv.to_day)
+        .bind(req.travel_id)
+        .bind(mv.from_day + SHIFT_TEMP_OFFSET)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+
+    let mut affected: std::collections::HashSet<i32> = day_nums.iter().copied().collect();
+    for mv in &preview.moves {
+        affected.insert(mv.to_day);
+    }
+    let mut affected: Vec<i32> = affected.into_iter().collect();
+    affected.sort_unstable();
+    for day in affected {
+        compact_day_sort(&state.pool, req.travel_id, day).await?;
+    }
+
+    let plan_ids: Vec<i64> = sqlx::query_scalar("SELECT id FROM day_plan WHERE travel_id = $1")
+        .bind(req.travel_id)
+        .fetch_all(&state.pool)
+        .await?;
+    invalidate_route_cache(&state.pool, &plan_ids).await;
+    Ok(ok(preview))
+}
+
 pub async fn map_global(
     State(state): State<AppState>,
     user: AuthUser,
@@ -770,7 +1080,16 @@ pub async fn map_global(
     require_member(&state.pool, q.travel_id, user.id).await?;
     let plans = list_plans(&state.pool, q.travel_id, None).await?;
     let points: Vec<PlanVo> = plans.iter().map(to_vo).collect();
-    let lines = with_routes(&state.pool, &state.amap_key, &state.amap_secret, &points).await;
+    let cache_only = q.cache_only.unwrap_or(0) != 0;
+    let lines = with_routes(
+        &state.pool,
+        &state.amap_key,
+        &state.amap_secret,
+        &points,
+        false,
+        cache_only,
+    )
+    .await;
     Ok(ok(MapVo { points, lines }))
 }
 
@@ -801,7 +1120,21 @@ pub async fn map_day(
         }
     }
 
-    let lines = with_routes(&state.pool, &state.amap_key, &state.amap_secret, &points).await;
+    let force = q.fresh.unwrap_or(0) != 0;
+    let cache_only = q.cache_only.unwrap_or(0) != 0;
+    if force {
+        let ids: Vec<i64> = points.iter().map(|p| p.id).collect();
+        invalidate_route_cache(&state.pool, &ids).await;
+    }
+    let lines = with_routes(
+        &state.pool,
+        &state.amap_key,
+        &state.amap_secret,
+        &points,
+        force,
+        cache_only,
+    )
+    .await;
     Ok(ok(MapVo { points, lines }))
 }
 
@@ -816,6 +1149,7 @@ pub async fn map_search(
         &q.q,
         q.lng,
         q.lat,
+        None,
     )
     .await?;
     Ok(ok(list))
@@ -828,4 +1162,225 @@ pub async fn map_regeo(
 ) -> Result<Json<ApiOk<crate::poi::PoiVo>>, AppError> {
     let poi = reverse_geocode(&state.amap_key, &state.amap_secret, q.lng, q.lat).await?;
     Ok(ok(poi))
+}
+
+#[derive(Deserialize)]
+pub struct AiDraftReq {
+    pub travel_id: i64,
+    pub prompt: String,
+    pub day_num: Option<i32>,
+    pub mode: Option<String>,
+    pub fresh: Option<bool>,
+}
+
+#[derive(Deserialize)]
+pub struct AiApplyReq {
+    pub travel_id: i64,
+    pub day_num: Option<i32>,
+    pub days: Vec<crate::ai::AiDay>,
+}
+
+fn existing_plan_brief(plans: &[PlanRow], focus_day: Option<i32>) -> String {
+    if plans.is_empty() {
+        return "暂无行程".into();
+    }
+    let mut by_day: Vec<(i32, Vec<String>)> = Vec::new();
+    for p in plans {
+        if let Some((_, names)) = by_day.iter_mut().find(|(d, _)| *d == p.day_num) {
+            names.push(p.place_name.clone());
+        } else {
+            by_day.push((p.day_num, vec![p.place_name.clone()]));
+        }
+    }
+    let all = by_day
+        .iter()
+        .map(|(d, names)| format!("D{d}: {}", names.join("、")))
+        .collect::<Vec<_>>()
+        .join("；");
+    if let Some(d) = focus_day {
+        let names = by_day
+            .into_iter()
+            .find(|(n, _)| *n == d)
+            .map(|(_, names)| names.join("、"))
+            .unwrap_or_else(|| "这一天还空着".into());
+        format!("全程：{all}\n正在改 D{d}，现有点：{names}")
+    } else {
+        all
+    }
+}
+
+pub async fn ai_draft(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Json(req): Json<AiDraftReq>,
+) -> Result<Json<ApiOk<crate::ai::AiDraft>>, AppError> {
+    require_editor(&state.pool, req.travel_id, user.id).await?;
+    let t = find_travel(&state.pool, req.travel_id).await?;
+    let days = day_count(t.start_date, t.end_date);
+    let focus_day = match req.day_num {
+        Some(d) if d >= 1 && d <= days => Some(d),
+        Some(_) => return Err(AppError::BadRequest("天数不在旅途范围内".into())),
+        None => None,
+    };
+    let plans = list_plans(&state.pool, req.travel_id, None).await?;
+    let fresh = req.fresh.unwrap_or(false);
+    let recommend = !fresh && req.mode.as_deref() == Some("recommend");
+    if recommend && plans.is_empty() {
+        return Err(AppError::BadRequest("先排几个地点，再沿途推荐".into()));
+    }
+    let log_ctx = AiDraftLogCtx {
+        pool: &state.pool,
+        travel_id: req.travel_id,
+        user_id: user.id,
+        mode: if recommend { "recommend" } else { "plan" },
+        fresh,
+        day_num: focus_day,
+        user_prompt: req.prompt.clone(),
+    };
+    let draft = crate::ai::draft_itinerary(
+        &state.deepseek_api_key,
+        &state.amap_key,
+        &state.amap_secret,
+        &t.destination,
+        &t.start_date.to_string(),
+        &t.end_date.to_string(),
+        days,
+        &existing_plan_brief(&plans, focus_day),
+        &req.prompt,
+        focus_day,
+        recommend,
+        fresh,
+        Some(&log_ctx),
+    )
+    .await?;
+    Ok(ok(draft))
+}
+
+#[derive(Deserialize)]
+pub struct AiLogQuery {
+    pub travel_id: i64,
+    pub limit: Option<i64>,
+}
+
+pub async fn ai_logs(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Query(q): Query<AiLogQuery>,
+) -> Result<Json<ApiOk<Vec<crate::ai_log::AiPlanLogVo>>>, AppError> {
+    require_editor(&state.pool, q.travel_id, user.id).await?;
+    let limit = q.limit.unwrap_or(20).clamp(1, 50);
+    let rows = list_ai_plan_logs(&state.pool, q.travel_id, limit).await?;
+    Ok(ok(rows))
+}
+
+pub async fn ai_apply(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Json(req): Json<AiApplyReq>,
+) -> Result<Json<ApiOk<serde_json::Value>>, AppError> {
+    require_editor(&state.pool, req.travel_id, user.id).await?;
+    let t = find_travel(&state.pool, req.travel_id).await?;
+    let max_days = day_count(t.start_date, t.end_date);
+    if req.days.is_empty() {
+        return Err(AppError::BadRequest("没有可保存的行程".into()));
+    }
+    let focus_day = match req.day_num {
+        Some(d) if d >= 1 && d <= max_days => Some(d),
+        Some(_) => return Err(AppError::BadRequest("天数不在旅途范围内".into())),
+        None => None,
+    };
+    let mut rows: Vec<(i32, crate::ai::AiPoint)> = Vec::new();
+    for day in &req.days {
+        if day.day_num < 1 || day.day_num > max_days {
+            return Err(AppError::BadRequest("天数不在旅途范围内".into()));
+        }
+        if focus_day.is_some() && focus_day != Some(day.day_num) {
+            continue;
+        }
+        for p in &day.points {
+            let name = p.place_name.trim();
+            if name.is_empty() {
+                continue;
+            }
+            if !valid_point_type(&p.point_type) {
+                return Err(AppError::BadRequest("点位类型不合法".into()));
+            }
+            rows.push((day.day_num, p.clone()));
+            if rows.len() > 56 {
+                return Err(AppError::BadRequest("地点太多，精简后再保存".into()));
+            }
+        }
+    }
+    let old_ids: Vec<i64> = if let Some(day) = focus_day {
+        sqlx::query_scalar("SELECT id FROM day_plan WHERE travel_id=$1 AND day_num=$2")
+            .bind(req.travel_id)
+            .bind(day)
+            .fetch_all(&state.pool)
+            .await?
+    } else {
+        sqlx::query_scalar("SELECT id FROM day_plan WHERE travel_id=$1")
+            .bind(req.travel_id)
+            .fetch_all(&state.pool)
+            .await?
+    };
+
+    if focus_day.is_none() {
+        clear_travel_route_cache(&state.pool, req.travel_id).await;
+    }
+    let mut tx = state.pool.begin().await?;
+    if let Some(day) = focus_day {
+        sqlx::query("DELETE FROM day_plan WHERE travel_id=$1 AND day_num=$2")
+            .bind(req.travel_id)
+            .bind(day)
+            .execute(&mut *tx)
+            .await?;
+    } else {
+        sqlx::query("DELETE FROM day_plan WHERE travel_id=$1")
+            .bind(req.travel_id)
+            .execute(&mut *tx)
+            .await?;
+    }
+
+    let mut sort_by_day: std::collections::HashMap<i32, i32> = std::collections::HashMap::new();
+    for (day_num, p) in rows {
+        let sort = {
+            let n = sort_by_day.entry(day_num).or_insert(0);
+            let cur = *n;
+            *n += 1;
+            cur
+        };
+        let lng = p.longitude.and_then(Decimal::from_f64);
+        let lat = p.latitude.and_then(Decimal::from_f64);
+        let arrive = parse_time(&p.arrive)?;
+        let remark = p.note.as_deref().map(str::trim).filter(|s| !s.is_empty());
+        let traffic = if sort == 0 {
+            None
+        } else {
+            Some("drive".to_string())
+        };
+        sqlx::query(
+            r#"
+            INSERT INTO day_plan (
+                travel_id, day_num, point_type, place_name, longitude, latitude,
+                arrive_time, leave_time, stay_duration, traffic_type, traffic_duration, sort, remark
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,NULL,$8,$9,NULL,$10,$11)
+            "#,
+        )
+        .bind(req.travel_id)
+        .bind(day_num)
+        .bind(&p.point_type)
+        .bind(p.place_name.trim())
+        .bind(lng)
+        .bind(lat)
+        .bind(arrive)
+        .bind(p.stay_minutes)
+        .bind(&traffic)
+        .bind(sort)
+        .bind(remark)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+    invalidate_route_cache(&state.pool, &old_ids).await;
+    Ok(ok(serde_json::json!({ "ok": true })))
 }

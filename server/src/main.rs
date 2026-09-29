@@ -1,3 +1,5 @@
+mod ai;
+mod ai_log;
 mod auth;
 mod client;
 mod db;
@@ -5,10 +7,12 @@ mod error;
 mod handlers;
 mod poi;
 mod route;
+mod route_thumb;
 mod sample;
 mod settle;
 mod state;
 mod util;
+mod worklife;
 
 use std::env;
 
@@ -35,8 +39,14 @@ async fn main() {
     let wechat_secret = env::var("WECHAT_SECRET").unwrap_or_default().trim().to_string();
     let amap_key = env::var("AMAP_KEY").unwrap_or_default().trim().to_string();
     let amap_secret = env::var("AMAP_SECRET").unwrap_or_default().trim().to_string();
+    let deepseek_api_key = env::var("DEEPSEEK_API_KEY").unwrap_or_default().trim().to_string();
     if amap_key.is_empty() {
         tracing::info!("未配置 AMAP_KEY：路书用点到点连线并估算时间；填高德 Web 服务 Key 后按驾车/步行规划");
+    }
+    if deepseek_api_key.is_empty() {
+        tracing::info!("未配置 DEEPSEEK_API_KEY：AI 排行程不可用");
+    } else {
+        tracing::info!("已启用 DeepSeek AI 排行程");
     }
     if wechat_appid.is_empty() || wechat_secret.is_empty() {
         tracing::info!("未配置 WECHAT_APPID/WECHAT_SECRET：开发模式用本地身份；真机请填写小程序 AppID 和 AppSecret");
@@ -69,6 +79,7 @@ async fn main() {
         wechat_secret,
         amap_key,
         amap_secret,
+        deepseek_api_key,
         dev_mode,
     };
     let app = handlers::router(state);

@@ -1,6 +1,43 @@
+use std::collections::{HashMap, VecDeque};
+use std::sync::OnceLock;
+use std::time::{Duration, Instant};
+
 use serde::Deserialize;
+use tokio::sync::Mutex;
 
 use crate::error::AppError;
+
+/// 高德同一接口 QPS ≤ 3。按 path 滑动窗口排队。
+pub async fn throttle_amap(path: &str) {
+    const MAX: usize = 3;
+    const WINDOW: Duration = Duration::from_millis(1050);
+    static LIMITER: OnceLock<Mutex<HashMap<String, VecDeque<Instant>>>> = OnceLock::new();
+    let slots = LIMITER.get_or_init(|| Mutex::new(HashMap::new()));
+    loop {
+        let mut map = slots.lock().await;
+        let now = Instant::now();
+        let q = map.entry(path.to_string()).or_default();
+        while q.front().is_some_and(|t| now.duration_since(*t) >= WINDOW) {
+            q.pop_front();
+        }
+        if q.len() < MAX {
+            q.push_back(now);
+            return;
+        }
+        let wait = q
+            .front()
+            .map(|t| WINDOW.saturating_sub(now.duration_since(*t)) + Duration::from_millis(20))
+            .unwrap_or(Duration::from_millis(350));
+        drop(map);
+        tokio::time::sleep(wait).await;
+    }
+}
+
+fn amap_qps_exceeded(v: &serde_json::Value) -> bool {
+    let info = v.get("info").and_then(|x| x.as_str()).unwrap_or("");
+    let code = v.get("infocode").and_then(|x| x.as_str()).unwrap_or("");
+    code == "10021" || info.contains("CUQPS") || info.contains("QPS")
+}
 
 #[derive(serde::Serialize, Clone)]
 pub struct PoiVo {
@@ -91,17 +128,21 @@ async fn amap_json(key: &str, secret: &str, path: &str, params: &[(&str, &str)])
         url.push_str("&sig=");
         url.push_str(&format!("{:x}", md5::compute(format!("{query_raw}{secret}").as_bytes())));
     }
-    reqwest::Client::builder()
+    let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(4))
         .build()
-        .ok()?
-        .get(&url)
-        .send()
-        .await
-        .ok()?
-        .json::<serde_json::Value>()
-        .await
-        .ok()
+        .ok()?;
+    for attempt in 0..3 {
+        throttle_amap(path).await;
+        let v = client.get(&url).send().await.ok()?.json::<serde_json::Value>().await.ok()?;
+        if amap_qps_exceeded(&v) && attempt < 2 {
+            tracing::warn!("amap qps limited path={path} attempt={}", attempt + 1);
+            tokio::time::sleep(Duration::from_millis(400)).await;
+            continue;
+        }
+        return Some(v);
+    }
+    None
 }
 
 async fn amap_get(key: &str, secret: &str, path: &str, params: &[(&str, &str)]) -> Option<AmapSearch> {
@@ -161,6 +202,7 @@ pub async fn search_places(
     keyword: &str,
     lng: Option<f64>,
     lat: Option<f64>,
+    city: Option<&str>,
 ) -> Result<Vec<PoiVo>, AppError> {
     if key.is_empty() {
         return Err(AppError::BadRequest("未配置 AMAP_KEY，无法搜索地点".into()));
@@ -173,6 +215,7 @@ pub async fn search_places(
         (Some(lng), Some(lat)) => Some(format!("{lng:.6},{lat:.6}")),
         _ => None,
     };
+    let city = city.map(str::trim).filter(|s| !s.is_empty());
     let mut params: Vec<(&str, &str)> = vec![
         ("keywords", kw),
         ("offset", "8"),
@@ -181,6 +224,9 @@ pub async fn search_places(
     ];
     if let Some(ref loc) = loc {
         params.push(("location", loc.as_str()));
+    }
+    if let Some(c) = city {
+        params.push(("city", c));
     }
     let mut list = pois_from_search(
         amap_get(key, secret, "/v3/place/text", &params)
@@ -198,6 +244,9 @@ pub async fn search_places(
         if let Some(ref loc) = loc {
             tip_params.push(("location", loc.as_str()));
         }
+        if let Some(c) = city {
+            tip_params.push(("city", c));
+        }
         list = pois_from_search(
             amap_get(key, secret, "/v3/assistant/inputtips", &tip_params)
                 .await
@@ -211,21 +260,20 @@ pub async fn search_places(
         );
     }
     if list.is_empty() {
+        let mut geo_params: Vec<(&str, &str)> = vec![("address", kw)];
+        if let Some(c) = city {
+            geo_params.push(("city", c));
+        }
         list = pois_from_search(
-            amap_get(
-                key,
-                secret,
-                "/v3/geocode/geo",
-                &[("address", kw)],
-            )
-            .await
-            .unwrap_or(AmapSearch {
-                status: None,
-                info: None,
-                pois: None,
-                tips: None,
-                geocodes: None,
-            }),
+            amap_get(key, secret, "/v3/geocode/geo", &geo_params)
+                .await
+                .unwrap_or(AmapSearch {
+                    status: None,
+                    info: None,
+                    pois: None,
+                    tips: None,
+                    geocodes: None,
+                }),
         );
     }
     Ok(list)
@@ -299,4 +347,125 @@ pub async fn reverse_geocode(
         longitude: lng,
         latitude: lat,
     })
+}
+
+fn is_transport_hub(name: &str) -> bool {
+    [
+        "机场", "航站楼", "火车站", "高铁站", "动车站", "汽车站", "客运站", "停车楼",
+    ]
+    .iter()
+    .any(|k| name.contains(k))
+}
+
+/// 市/县/区级地名，优先走地理编码而非 POI 搜索
+pub fn looks_like_admin_place(name: &str) -> bool {
+    let n = name.trim();
+    if n.is_empty() || is_transport_hub(n) {
+        return false;
+    }
+    let ends_admin = n.ends_with('市')
+        || n.ends_with('县')
+        || n.ends_with('区')
+        || n.ends_with("自治县")
+        || n.ends_with("自治州");
+    ends_admin && n.chars().count() <= 12
+}
+
+fn score_poi(p: &PoiVo, target: &str, query: &str, want_transport: bool) -> i32 {
+    let mut s = 0i32;
+    let pn = p.name.trim();
+    let target = target.trim();
+    if pn == target {
+        s += 200;
+    } else if pn.contains(target) || target.contains(pn) {
+        s += 80;
+    }
+    if !query.is_empty() && (pn.contains(query) || p.address.contains(query)) {
+        s += 40;
+    }
+    if is_transport_hub(pn) {
+        if want_transport {
+            s += 60;
+        } else {
+            s -= 150;
+        }
+    }
+    if target.ends_with('市') || target.ends_with('县') || target.ends_with('区') {
+        if pn == target {
+            s += 50;
+        }
+        if pn.contains("人民政府") || pn.contains("县政府") || pn.contains("市政府") {
+            s += 45;
+        }
+    }
+    if pn.chars().count() > target.chars().count() + 8 {
+        s -= 25;
+    }
+    s
+}
+
+/// 从搜索结果里挑最匹配的一项，避免地级市名误落到机场
+pub fn pick_best_poi<'a>(list: &'a [PoiVo], target: &str, query: &str) -> Option<&'a PoiVo> {
+    if list.is_empty() {
+        return None;
+    }
+    let want_transport = is_transport_hub(target) || is_transport_hub(query);
+    list.iter()
+        .max_by_key(|p| score_poi(p, target, query, want_transport))
+}
+
+/// 地址地理编码（市/县等行政区更适合走此接口）
+pub async fn geocode_address(
+    key: &str,
+    secret: &str,
+    address: &str,
+    city: Option<&str>,
+) -> Option<PoiVo> {
+    let kw = address.trim();
+    if kw.chars().count() < 2 || key.is_empty() {
+        return None;
+    }
+    let mut params: Vec<(&str, &str)> = vec![("address", kw)];
+    if let Some(c) = city.map(str::trim).filter(|s| !s.is_empty()) {
+        params.push(("city", c));
+    }
+    let list = pois_from_search(
+        amap_get(key, secret, "/v3/geocode/geo", &params)
+            .await
+            .unwrap_or(AmapSearch {
+                status: None,
+                info: None,
+                pois: None,
+                tips: None,
+                geocodes: None,
+            }),
+    );
+    pick_best_poi(&list, kw, kw)
+        .or(list.first())
+        .cloned()
+}
+
+#[cfg(test)]
+mod pick_tests {
+    use super::*;
+
+    #[test]
+    fn deprioritize_airport_for_city() {
+        let list = vec![
+            PoiVo {
+                name: "松原查干湖机场".into(),
+                address: String::new(),
+                longitude: 124.0,
+                latitude: 45.0,
+            },
+            PoiVo {
+                name: "松原市".into(),
+                address: "吉林省松原市".into(),
+                longitude: 124.82,
+                latitude: 45.14,
+            },
+        ];
+        let hit = pick_best_poi(&list, "松原市", "松原市").unwrap();
+        assert_eq!(hit.name, "松原市");
+    }
 }

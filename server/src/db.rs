@@ -5,6 +5,8 @@ use sqlx::PgPool;
 use crate::error::AppError;
 use crate::route::LatLng;
 
+pub const USER_COLS: &str = "id, open_id, nickname, avatar, default_bill_visible, birthday, gender, female_role, work_start_year, work_start_month";
+
 #[derive(sqlx::FromRow, Clone)]
 #[allow(dead_code)]
 pub struct UserRow {
@@ -13,6 +15,11 @@ pub struct UserRow {
     pub nickname: String,
     pub avatar: Option<String>,
     pub default_bill_visible: bool,
+    pub birthday: Option<NaiveDate>,
+    pub gender: i16,
+    pub female_role: i16,
+    pub work_start_year: Option<i32>,
+    pub work_start_month: Option<i16>,
 }
 
 #[derive(sqlx::FromRow, Clone)]
@@ -27,6 +34,7 @@ pub struct TravelRow {
     pub creator_id: i64,
     pub is_lock: bool,
     pub remark: Option<String>,
+    pub cover: String,
 }
 
 #[derive(sqlx::FromRow, Clone)]
@@ -63,9 +71,9 @@ pub struct PlanRow {
 }
 
 pub async fn find_user(pool: &PgPool, id: i64) -> Result<UserRow, AppError> {
-    sqlx::query_as::<_, UserRow>(
-        r#"SELECT id, open_id, nickname, avatar, default_bill_visible FROM app_user WHERE id = $1"#,
-    )
+    sqlx::query_as::<_, UserRow>(&format!(
+        "SELECT {USER_COLS} FROM app_user WHERE id = $1"
+    ))
     .bind(id)
     .fetch_optional(pool)
     .await?
@@ -133,7 +141,7 @@ pub async fn find_travel(pool: &PgPool, id: i64) -> Result<TravelRow, AppError> 
     sqlx::query_as::<_, TravelRow>(
         r#"
         SELECT id, travel_name, destination, start_date, end_date, invite_code,
-               status, creator_id, is_lock, remark
+               status, creator_id, is_lock, remark, cover
         FROM travel WHERE id = $1
         "#,
     )
@@ -195,7 +203,7 @@ pub async fn list_plans(pool: &PgPool, travel_id: i64, day_num: Option<i32>) -> 
 pub fn status_text(status: i16, end_date: NaiveDate) -> &'static str {
     if status == 2 {
         "已归档"
-    } else if end_date < chrono::Local::now().date_naive() {
+    } else if end_date < crate::util::shanghai_today() {
         "已结束"
     } else {
         "进行中"
@@ -205,7 +213,7 @@ pub fn status_text(status: i16, end_date: NaiveDate) -> &'static str {
 pub fn display_status(status: i16, end_date: NaiveDate) -> i16 {
     if status == 2 {
         2
-    } else if end_date < chrono::Local::now().date_naive() {
+    } else if end_date < crate::util::shanghai_today() {
         1
     } else {
         0
@@ -336,6 +344,19 @@ pub async fn invalidate_route_cache(pool: &PgPool, plan_ids: &[i64]) {
         "DELETE FROM route_cache WHERE from_plan_id = ANY($1) OR to_plan_id = ANY($1)",
     )
     .bind(plan_ids)
+    .execute(pool)
+    .await;
+}
+
+pub async fn clear_travel_route_cache(pool: &PgPool, travel_id: i64) {
+    let _ = sqlx::query(
+        r#"
+        DELETE FROM route_cache
+        WHERE from_plan_id IN (SELECT id FROM day_plan WHERE travel_id = $1)
+           OR to_plan_id IN (SELECT id FROM day_plan WHERE travel_id = $1)
+        "#,
+    )
+    .bind(travel_id)
     .execute(pool)
     .await;
 }
