@@ -56,6 +56,15 @@ async fn main() {
     }
     let dev_mode = env::var("DEV_MODE").unwrap_or_else(|_| "1".into()) != "0";
     let port = env::var("PORT").unwrap_or_else(|_| "3000".into());
+    let review_raw = env::var("REVIEW_VERSION").unwrap_or_default();
+    let review_version = crate::client::parse_version(review_raw.trim());
+    if review_raw.trim().is_empty() {
+        tracing::info!("未配置 REVIEW_VERSION：邀请码对所有版本开放");
+    } else if review_version.is_none() {
+        tracing::warn!("REVIEW_VERSION 无法解析，已忽略：{}", review_raw.trim());
+    } else {
+        tracing::info!("审核版本 {}：该版本不提供邀请码", review_raw.trim());
+    }
 
     tracing::info!("connecting database...");
     let pool = PgPoolOptions::new()
@@ -82,6 +91,7 @@ async fn main() {
         amap_secret,
         deepseek_api_key,
         dev_mode,
+        review_version,
     };
     let app = handlers::router(state);
     let addr = format!("0.0.0.0:{port}");

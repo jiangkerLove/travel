@@ -5,6 +5,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    client::ClientInfo,
     db::{
         display_status, find_travel, list_members, require_leader, require_member, require_viewer,
         status_text, MemberRow,
@@ -106,6 +107,13 @@ struct TravelListRow {
     can_bill: bool,
 }
 
+fn for_client(mut vo: TravelVo, review: bool) -> TravelVo {
+    if review {
+        vo.invite_code.clear();
+    }
+    vo
+}
+
 fn to_vo(t: &TravelRow, member_count: i64, role: i16, can_edit: bool, can_bill: bool) -> TravelVo {
     let is_sample = crate::sample::is_sample_remark(&t.remark);
     let read_only = is_sample || t.status == 2;
@@ -196,6 +204,7 @@ fn member_vo(m: &MemberRow) -> MemberVo {
 pub async fn create(
     State(state): State<AppState>,
     user: AuthUser,
+    client: ClientInfo,
     Json(req): Json<CreateReq>,
 ) -> Result<Json<ApiOk<TravelVo>>, AppError> {
     let name = req.travel_name.trim();
@@ -255,7 +264,10 @@ pub async fn create(
         .await?;
     tx.commit().await?;
 
-    Ok(ok(to_vo(&travel, 1, 1, true, true)))
+    Ok(ok(for_client(
+        to_vo(&travel, 1, 1, true, true),
+        state.is_review(&client),
+    )))
 }
 
 #[derive(Deserialize)]
@@ -275,6 +287,7 @@ pub struct UpdateReq {
 pub async fn update(
     State(state): State<AppState>,
     user: AuthUser,
+    client: ClientInfo,
     Json(req): Json<UpdateReq>,
 ) -> Result<Json<ApiOk<TravelVo>>, AppError> {
     require_leader(&state.pool, req.travel_id, user.id).await?;
@@ -393,12 +406,16 @@ pub async fn update(
         .bind(travel.id)
         .fetch_one(&state.pool)
         .await?;
-    Ok(ok(to_vo(&travel, count, 1, true, true)))
+    Ok(ok(for_client(
+        to_vo(&travel, count, 1, true, true),
+        state.is_review(&client),
+    )))
 }
 
 pub async fn list(
     State(state): State<AppState>,
     user: AuthUser,
+    client: ClientInfo,
     Query(q): Query<ListQ>,
 ) -> Result<Json<ApiOk<Vec<TravelVo>>>, AppError> {
     let archived = q.archived.unwrap_or(false);
@@ -483,6 +500,7 @@ pub async fn list(
         }
     }
 
+    let review = state.is_review(&client);
     let ids: Vec<i64> = rows
         .iter()
         .filter(|r| normalize_cover(Some(&r.travel.cover)) == "route")
@@ -494,7 +512,7 @@ pub async fn list(
         .map(|r| {
             let mut vo = to_vo(&r.travel, r.member_count, r.role, r.can_edit, r.can_bill);
             vo.route_svg = thumbs.get(&r.travel.id).cloned();
-            vo
+            for_client(vo, review)
         })
         .collect()))
 }
@@ -587,6 +605,7 @@ async fn load_route_thumbs(
 pub async fn detail(
     State(state): State<AppState>,
     user: AuthUser,
+    client: ClientInfo,
     Query(q): Query<DetailQ>,
 ) -> Result<Json<ApiOk<TravelVo>>, AppError> {
     let m = require_viewer(&state.pool, q.id, user.id).await?;
@@ -595,14 +614,21 @@ pub async fn detail(
         .bind(q.id)
         .fetch_one(&state.pool)
         .await?;
-    Ok(ok(to_vo(&t, count, m.role, m.can_edit, m.can_bill)))
+    Ok(ok(for_client(
+        to_vo(&t, count, m.role, m.can_edit, m.can_bill),
+        state.is_review(&client),
+    )))
 }
 
 pub async fn join(
     State(state): State<AppState>,
     user: AuthUser,
+    client: ClientInfo,
     Json(req): Json<JoinReq>,
 ) -> Result<Json<ApiOk<TravelVo>>, AppError> {
+    if state.is_review(&client) {
+        return Err(AppError::BadRequest("当前版本暂不支持加入".into()));
+    }
     let code = req.invite_code.trim().to_uppercase();
     if code.is_empty() {
         return Err(AppError::BadRequest("请输入邀请码".into()));
@@ -656,6 +682,7 @@ pub async fn member(
 pub async fn lock(
     State(state): State<AppState>,
     user: AuthUser,
+    client: ClientInfo,
     Json(req): Json<LockReq>,
 ) -> Result<Json<ApiOk<TravelVo>>, AppError> {
     require_leader(&state.pool, req.travel_id, user.id).await?;
@@ -677,7 +704,10 @@ pub async fn lock(
         .bind(t.id)
         .fetch_one(&state.pool)
         .await?;
-    Ok(ok(to_vo(&t, count, 1, true, true)))
+    Ok(ok(for_client(
+        to_vo(&t, count, 1, true, true),
+        state.is_review(&client),
+    )))
 }
 
 pub async fn quit(

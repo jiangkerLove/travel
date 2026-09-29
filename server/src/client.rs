@@ -42,6 +42,14 @@ impl ClientInfo {
             _ => false,
         }
     }
+
+    /// 与目标版本号按段数值完全一致。未带版本、无法解析、或未配置目标时都不算一致。
+    pub fn matches(&self, version: Option<(u32, u32, u32)>) -> bool {
+        match (self.version, version) {
+            (Some(current), Some(target)) => current == target,
+            _ => false,
+        }
+    }
 }
 
 fn header_value(headers: &HeaderMap, name: &HeaderName) -> String {
@@ -62,7 +70,7 @@ fn normalize_env(raw: &str) -> String {
     }
 }
 
-fn parse_version(raw: &str) -> Option<(u32, u32, u32)> {
+pub fn parse_version(raw: &str) -> Option<(u32, u32, u32)> {
     let raw = raw.trim();
     if raw.is_empty() {
         return None;
@@ -135,5 +143,14 @@ mod tests {
         assert!(later.at_least("1.0.2"));
         assert!(later.at_least("1.0.102"));
         assert!(!info("1.0.9").at_least("1.0.10"));
+    }
+
+    #[test]
+    fn review_match_is_exact() {
+        assert!(info("1.0.3").matches(parse_version("1.0.3")));
+        assert!(!info("1.0.2").matches(parse_version("1.0.3")));
+        assert!(!info("1.0.102").matches(parse_version("1.0.3")));
+        assert!(!info("1.0.3").matches(None));
+        assert!(!info("").matches(parse_version("1.0.3")));
     }
 }

@@ -2,6 +2,13 @@ const { api } = require('../../utils/api')
 
 Page({
   data: { code: '' },
+  async onShow() {
+    const review = await getApp().refreshFlags()
+    if (!review) return
+    const pages = getCurrentPages()
+    if (pages.length > 1) wx.navigateBack()
+    else wx.switchTab({ url: '/pages/index/index' })
+  },
   onCode(e) { this.setData({ code: (e.detail.value || '').toUpperCase() }) },
   async submit() {
     if (!this.data.code) {

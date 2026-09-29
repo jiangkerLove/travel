@@ -260,7 +260,7 @@
     </view>
 
     <view wx:if="{{mode === 'browse' && tab === 'member'}}" class="body-pad">
-      <view class="invite-card">
+      <view class="invite-card" wx:if="{{!review}}">
         <view class="invite-left">
           <view class="stat-k">邀请码</view>
           <view class="invite-code">{{trip.invite_code}}</view>
@@ -307,7 +307,7 @@
 
       <view class="empty-card" wx:if="{{!members.length}}">
         <view class="empty-title">还没有成员</view>
-        <view class="empty-sub">把邀请码给同行，或添加随行成员</view>
+        <view class="empty-sub">{{review ? '可以添加随行成员' : '把邀请码给同行，或添加随行成员'}}</view>
       </view>
 
       <view class="mgmt-card" wx:if="{{!trip.is_sample && trip.status !== 2 && trip.role !== 1}}">

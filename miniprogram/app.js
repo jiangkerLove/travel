@@ -24,6 +24,8 @@ function localOpenId() {
 App({
   globalData: {
     user: null,
+    // 先按审核处理，拿到服务端结果后再打开邀请码，避免审核包先闪出入口
+    review: true,
   },
   markTripsDirty() {
     this._tripsDirty = true
@@ -35,6 +37,14 @@ App({
   },
   onLaunch() {
     this.silentLogin().catch(() => {})
+    this.refreshFlags().catch(() => {})
+  },
+  refreshFlags() {
+    return api.appFlags().then((data) => {
+      const review = !!(data && data.review)
+      this.globalData.review = review
+      return review
+    }).catch(() => this.globalData.review !== false)
   },
   setUser(user, token) {
     this.globalData.user = user

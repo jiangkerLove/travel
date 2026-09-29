@@ -23,13 +23,15 @@ function decorate(list) {
 }
 
 Page({
-  data: { list: [], loading: true },
+  data: { list: [], loading: true, review: true },
   async onShow() {
     const ok = await getApp().ensureLogin()
     if (!ok) {
       wx.reLaunch({ url: '/pages/boot/boot' })
       return
     }
+    const review = await getApp().refreshFlags()
+    if (review !== this.data.review) this.setData({ review })
 
     const first = !this._inited
     const dirty = getApp().consumeTripsDirty()

@@ -2,6 +2,7 @@ const { request } = require('./request')
 
 const api = {
   login: (data) => request({ url: '/api/user/login', method: 'POST', data, skipAuth: true, quiet: true }),
+  appFlags: () => request({ url: '/api/app/flags', skipAuth: true, quiet: true }),
   userInfo: () => request({ url: '/api/user/info' }),
   updateUser: (data) => request({ url: '/api/user/info', method: 'POST', data }),
   seed: () => request({ url: '/api/dev/seed', method: 'POST', data: {} }),

@@ -240,6 +240,7 @@ Page({
     canEdit: false,
     canBill: false,
     isCreator: false,
+    review: true,
     routesReady: false,
     generating: false,
     generatingHint: '',
@@ -299,6 +300,9 @@ Page({
     })
   },
   onShow() {
+    getApp().refreshFlags().then((review) => {
+      if (review !== this.data.review) this.setData({ review })
+    })
     if (!this.data.id) return
     if (this._plansStale) {
       this._plansStale = false

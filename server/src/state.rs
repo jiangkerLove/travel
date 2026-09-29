@@ -1,5 +1,7 @@
 use sqlx::PgPool;
 
+use crate::client::ClientInfo;
+
 #[derive(Clone)]
 pub struct AppState {
     pub pool: PgPool,
@@ -10,6 +12,14 @@ pub struct AppState {
     pub amap_secret: String,
     pub deepseek_api_key: String,
     pub dev_mode: bool,
+    /// `REVIEW_VERSION`。客户端版本与它按段数值一致时，视为审核包。空则没有任何版本处于审核。
+    pub review_version: Option<(u32, u32, u32)>,
+}
+
+impl AppState {
+    pub fn is_review(&self, client: &ClientInfo) -> bool {
+        client.matches(self.review_version)
+    }
 }
 
 #[derive(Clone)]

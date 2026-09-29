@@ -17,6 +17,7 @@ mod user;
 pub fn router(state: AppState) -> Router {
     let public = Router::new()
         .route("/health", get(health))
+        .route("/api/app/flags", get(flags))
         .route("/api/user/login", post(user::login))
         .route("/api/dev/seed", post(dev::seed));
 
@@ -78,5 +79,19 @@ struct Health {
 
 async fn health() -> Json<crate::error::ApiOk<Health>> {
     ok(Health { ok: true })
+}
+
+#[derive(Serialize)]
+struct Flags {
+    review: bool,
+}
+
+async fn flags(
+    axum::extract::State(state): axum::extract::State<AppState>,
+    client: ClientInfo,
+) -> Json<crate::error::ApiOk<Flags>> {
+    ok(Flags {
+        review: state.is_review(&client),
+    })
 }
 
