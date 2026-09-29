@@ -5,6 +5,7 @@ mod client;
 mod db;
 mod error;
 mod handlers;
+mod moderation;
 mod poi;
 mod route;
 mod route_thumb;

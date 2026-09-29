@@ -100,6 +100,7 @@ pub async fn login(
         "client login"
     );
     let open_id = resolve_open_id(&state, &req).await?;
+    crate::moderation::ensure_text(&state, Some(&open_id), &[req.nickname.as_deref()]).await?;
     let nickname = req
         .nickname
         .clone()
@@ -236,6 +237,7 @@ pub async fn update(
             return Err(AppError::BadRequest("昵称不合法".into()));
         }
     }
+    crate::moderation::ensure_user_text(&state, user.id, &[req.nickname.as_deref()]).await?;
     let birthday = parse_birthday(req.birthday.as_deref())?;
     if let Some(g) = req.gender {
         if g < 0 || g > 2 {

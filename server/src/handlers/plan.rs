@@ -386,6 +386,7 @@ pub async fn save(
     if name.is_empty() {
         return Err(AppError::BadRequest("地点名称不能为空".into()));
     }
+    crate::moderation::ensure_user_text(&state, user.id, &[Some(name), req.remark.as_deref()]).await?;
     if let Some(tr) = &req.traffic_type {
         if !tr.is_empty() && !valid_traffic_type(tr) {
             return Err(AppError::BadRequest("交通方式不合法".into()));
@@ -1215,6 +1216,7 @@ pub async fn ai_draft(
     Json(req): Json<AiDraftReq>,
 ) -> Result<Json<ApiOk<crate::ai::AiDraft>>, AppError> {
     require_editor(&state.pool, req.travel_id, user.id).await?;
+    crate::moderation::ensure_user_text(&state, user.id, &[Some(req.prompt.as_str())]).await?;
     let t = find_travel(&state.pool, req.travel_id).await?;
     let days = day_count(t.start_date, t.end_date);
     let focus_day = match req.day_num {
@@ -1311,6 +1313,16 @@ pub async fn ai_apply(
             }
         }
     }
+    let mut ai_text: Vec<Option<&str>> = Vec::new();
+    for day in &req.days {
+        ai_text.push(day.theme.as_deref());
+        for p in &day.points {
+            ai_text.push(Some(p.place_name.as_str()));
+            ai_text.push(Some(p.query.as_str()));
+            ai_text.push(p.note.as_deref());
+        }
+    }
+    crate::moderation::ensure_user_text(&state, user.id, &ai_text).await?;
     let old_ids: Vec<i64> = if let Some(day) = focus_day {
         sqlx::query_scalar("SELECT id FROM day_plan WHERE travel_id=$1 AND day_num=$2")
             .bind(req.travel_id)

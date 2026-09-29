@@ -159,6 +159,7 @@ pub async fn save(
     if name.is_empty() {
         return Err(AppError::BadRequest("消费名称不能为空".into()));
     }
+    crate::moderation::ensure_user_text(&state, user.id, &[Some(name), req.remark.as_deref()]).await?;
     if req.amount <= 0.0 {
         return Err(AppError::BadRequest("金额必须大于 0".into()));
     }

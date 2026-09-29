@@ -203,6 +203,12 @@ pub async fn create(
     if name.is_empty() || dest.is_empty() {
         return Err(AppError::BadRequest("旅途名称和目的地不能为空".into()));
     }
+    crate::moderation::ensure_user_text(
+        &state,
+        user.id,
+        &[Some(name), Some(dest), req.remark.as_deref()],
+    )
+    .await?;
     let start = parse_date(&req.start_date)?;
     let end = parse_date(&req.end_date)?;
     if end < start {
@@ -298,6 +304,12 @@ pub async fn update(
     if name.chars().count() > 100 || dest.chars().count() > 100 {
         return Err(AppError::BadRequest("名称或目的地过长".into()));
     }
+    crate::moderation::ensure_user_text(
+        &state,
+        user.id,
+        &[Some(name), Some(dest), req.remark.as_deref()],
+    )
+    .await?;
 
     let start = match &req.start_date {
         Some(s) => parse_date(s)?,
@@ -832,6 +844,8 @@ pub async fn add_companion(
     if nickname.is_empty() || nickname.chars().count() > 20 {
         return Err(AppError::BadRequest("请填写 1–20 字昵称".into()));
     }
+    crate::moderation::ensure_user_text(&state, user.id, &[Some(nickname), req.group_name.as_deref()])
+        .await?;
     let group = req
         .group_name
         .as_deref()
@@ -892,6 +906,7 @@ pub async fn set_group(
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(|s| s.chars().take(20).collect::<String>());
+    crate::moderation::ensure_user_text(&state, user.id, &[group.as_deref()]).await?;
     sqlx::query("UPDATE travel_member SET group_name=$3 WHERE travel_id=$1 AND user_id=$2")
         .bind(req.travel_id)
         .bind(req.user_id)
