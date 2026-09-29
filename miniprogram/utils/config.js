@@ -4,9 +4,9 @@
 // - 直连服务器 gateway（外层 Nginx 未好时）：http://服务器IP:8080
 module.exports = {
   baseUrl: 'https://travel.jiangker.cn',
-  // 跟代码包走。提审包改成新版本号，并在服务器 REVIEW_VERSION 填同一个号。
-  // 审核通过后把 REVIEW_VERSION 清空，这个版本也会恢复邀请码。不要和当前线上版本用同一个号。
-  version: '1.0.3',
+  // 跟代码包走，请求头 X-App-Version 用的就是这个值。
+  // 要和服务器 REVIEW_VERSION 完全一致才会隐藏邀请码。审核通过后清空 REVIEW_VERSION。
+  version: '1.0.2',
   mapKey: '',
   mapSk: '',
 }
