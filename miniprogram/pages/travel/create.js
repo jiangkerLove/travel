@@ -65,16 +65,8 @@ Page({
       })
       getApp().markTripsDirty()
       wx.hideLoading()
-      wx.showModal({
-        title: '旅途已创建',
-        content: `邀请码 ${t.invite_code}，可分享给同行好友`,
-        confirmText: '去排行程',
-        showCancel: false,
-        success: () => {
-          wx.redirectTo({
-            url: `/pages/travel/home?id=${t.id}&mode=browse&openEdit=1&name=${encodeURIComponent(t.travel_name || travel_name)}&dest=${encodeURIComponent(t.destination || destination)}`,
-          })
-        },
+      wx.redirectTo({
+        url: `/pages/travel/home?id=${t.id}&mode=browse&openEdit=1&name=${encodeURIComponent(t.travel_name || travel_name)}&dest=${encodeURIComponent(t.destination || destination)}`,
       })
     } catch (e) {
       wx.hideLoading()

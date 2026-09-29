@@ -1667,7 +1667,7 @@ Page({
       billEmptyTitle = date ? '这天没有你的花销' : '还没有你的花销'
       billEmptySub = '记一笔并勾选自己分摊即可'
     } else if (date) {
-      billEmptyTitle = '这天还没有公开账单'
+      billEmptyTitle = '这天还没有共同账单'
     }
 
     this.setData({ bills, stat, billScope, billListTitle, billEmptyTitle, billEmptySub })
@@ -1852,7 +1852,7 @@ Page({
             wx.showModal({
               title: '团体名称',
               editable: true,
-              placeholderText: '如 朋友这边',
+              placeholderText: '如 我这边',
               success: (x) => resolve(x.confirm ? (x.content || '').trim() : ''),
             })
           })

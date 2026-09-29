@@ -60,13 +60,13 @@
 
   <view class="form-card">
     <view class="sec-head">
-      <view class="sec-title">谁能看见</view>
+      <view class="sec-title">账单范围</view>
     </view>
     <view class="chip-row tight">
-      <view class="chip {{visible_all ? 'on' : ''}}" bind:tap="setVisible" data-v="1">所有人可见</view>
-      <view class="chip {{!visible_all ? 'on' : ''}}" bind:tap="setVisible" data-v="0">仅分摊成员</view>
+      <view class="chip {{visible_all ? 'on' : ''}}" bind:tap="setVisible" data-v="1">全团账单</view>
+      <view class="chip {{!visible_all ? 'on' : ''}}" bind:tap="setVisible" data-v="0">仅分摊人</view>
     </view>
-    <view class="muted">只选自己分摊时，选「仅分摊成员」就只有自己能看</view>
+    <view class="muted">只勾自己分摊时，选「仅分摊人」，这笔不进全团账单</view>
   </view>
 
   <view class="form-card">
@@ -94,7 +94,7 @@
       <view class="sec-title">挂到行程点</view>
       <view class="opt">可选</view>
     </view>
-    <view class="muted">记下这笔钱花在哪个景点/住宿，方便对照行程；超市购物等可不选</view>
+    <view class="muted">这笔钱对应哪个景点或住宿，方便对照行程；超市购物等可不选</view>
     <view class="chip-row tight">
       <view class="chip {{!day_plan_id ? 'on' : ''}}" bind:tap="clearPlan">不挂靠</view>
       <view

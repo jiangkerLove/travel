@@ -12,7 +12,7 @@
       <view class="hero-meta dest {{mapExpanded ? 'is-hide' : ''}}" wx:if="{{trip.destination}}">
         {{trip.destination}}<text wx:if="{{trip.start_date}}"> · {{trip.start_date}} – {{trip.end_date}}</text>
       </view>
-      <view class="hero-meta" wx:if="{{trip.is_sample}}">示例攻略</view>
+      <view class="hero-meta" wx:if="{{trip.is_sample}}">示例行程</view>
     </view>
 
     <view class="map-wrap" style="height: {{mapHeight}}px;">
@@ -264,7 +264,7 @@
         <view class="invite-left">
           <view class="stat-k">邀请码</view>
           <view class="invite-code">{{trip.invite_code}}</view>
-          <view class="invite-hint">好友输入邀请码即可加入</view>
+          <view class="invite-hint">同行输入邀请码即可加入</view>
         </view>
         <view class="invite-copy" bind:tap="copyCode">复制</view>
       </view>
@@ -307,7 +307,7 @@
 
       <view class="empty-card" wx:if="{{!members.length}}">
         <view class="empty-title">还没有成员</view>
-        <view class="empty-sub">分享邀请码，或添加随行成员</view>
+        <view class="empty-sub">把邀请码给同行，或添加随行成员</view>
       </view>
 
       <view class="mgmt-card" wx:if="{{!trip.is_sample && trip.status !== 2 && trip.role !== 1}}">
