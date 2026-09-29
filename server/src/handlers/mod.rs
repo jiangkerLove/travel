@@ -1,11 +1,12 @@
 use axum::{
+    http::Request,
     routing::{delete, get, post},
     Json, Router,
 };
 use serde::Serialize;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
-use crate::{error::ok, state::AppState};
+use crate::{client::ClientInfo, error::ok, state::AppState};
 
 mod bill;
 mod dev;
@@ -52,7 +53,16 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .merge(public)
         .merge(api)
-        .layer(TraceLayer::new_for_http())
+        .layer(TraceLayer::new_for_http().make_span_with(|request: &Request<_>| {
+            let client = ClientInfo::from_headers(request.headers());
+            tracing::info_span!(
+                "request",
+                method = %request.method(),
+                uri = %request.uri(),
+                client_version = %client.label(),
+                client_env = %client.env,
+            )
+        }))
         .layer(CorsLayer::permissive())
         .with_state(state)
 }

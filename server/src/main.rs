@@ -1,4 +1,5 @@
 mod auth;
+mod client;
 mod db;
 mod error;
 mod handlers;

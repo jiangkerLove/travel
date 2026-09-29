@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     auth::make_token,
+    client::ClientInfo,
     db::find_user,
     error::{ok, ApiOk, AppError},
     state::{AppState, AuthUser},
@@ -61,8 +62,15 @@ struct WxSession {
 
 pub async fn login(
     State(state): State<AppState>,
+    client: ClientInfo,
     Json(req): Json<LoginReq>,
 ) -> Result<Json<ApiOk<LoginVo>>, AppError> {
+    tracing::info!(
+        version = %client.label(),
+        env = %client.env,
+        versioned = client.at_least("1.0.2"),
+        "client login"
+    );
     let open_id = resolve_open_id(&state, &req).await?;
     let nickname = req
         .nickname
